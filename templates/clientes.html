@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}· Clientes{% endblock %}
+
+{% block topbar %}
+<div>
+  <div class="topbar-title">CLIENTES</div>
+  <div class="topbar-sub">Gestión comercial y seguimiento</div>
+</div>
+<div class="topbar-right">
+  <a href="/cliente/nuevo" class="btn btn-primary">+ Nuevo cliente</a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="kpi-row">
+  <div class="kpi orange">
+    <div class="kpi-label">Total clientes</div>
+    <div class="kpi-value">{{ stats.total }}</div>
+    <div class="kpi-sub">En base de datos</div>
+  </div>
+  <div class="kpi green">
+    <div class="kpi-label">Activos</div>
+    <div class="kpi-value">{{ stats.activos }}</div>
+    <div class="kpi-sub">Con proyecto o contrato</div>
+  </div>
+  <div class="kpi yellow">
+    <div class="kpi-label">Leads</div>
+    <div class="kpi-value">{{ stats.leads }}</div>
+    <div class="kpi-sub">Pendientes de conversión</div>
+  </div>
+  <div class="kpi blue">
+    <div class="kpi-label">Presupuestos enviados</div>
+    <div class="kpi-value">{{ stats.presupuestos_pendientes }}</div>
+    <div class="kpi-sub">A la espera de respuesta</div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <span class="panel-title">Todos los clientes</span>
+    <div style="display:flex;gap:.5rem;align-items:center">
+      <select onchange="filtrarEstado(this.value)" style="background:var(--card);border:1px solid var(--border);color:var(--muted2);font-family:var(--mono);font-size:.55rem;padding:.3rem .6rem;outline:none;">
+        <option value="">Todos los estados</option>
+        <option value="activo">Activo</option>
+        <option value="lead">Lead</option>
+        <option value="inactivo">Inactivo</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="search-bar" style="margin:.8rem;width:auto">
+    <span style="color:var(--muted)">⌕</span>
+    <input type="text" id="buscador" placeholder="Buscar por nombre, empresa o sector..." oninput="filtrar()"/>
+  </div>
+
+  <table class="table" id="tabla-clientes">
+    <thead>
+      <tr>
+        <th>Nombre / Empresa</th>
+        <th>Sector</th>
+        <th>Contacto</th>
+        <th>Presupuestos</th>
+        <th>Volumen</th>
+        <th>Estado</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in clientes %}
+      <tr data-estado="{{ c.estado }}" data-search="{{ (c.nombre + ' ' + (c.empresa or '') + ' ' + (c.sector or ''))|lower }}">
+        <td>
+          <a href="/cliente/{{ c.id }}" style="color:#fff;font-weight:400">{{ c.nombre }}</a>
+          {% if c.empresa %}<div style="font-size:.72rem;color:var(--muted2);margin-top:.1rem">{{ c.empresa }}</div>{% endif %}
+        </td>
+        <td style="color:var(--muted2);font-size:.78rem">{{ c.sector or '—' }}</td>
+        <td>
+          {% if c.email %}<div style="font-size:.75rem">{{ c.email }}</div>{% endif %}
+          {% if c.telefono %}<div style="font-family:var(--mono);font-size:.62rem;color:var(--muted2)">{{ c.telefono }}</div>{% endif %}
+        </td>
+        <td style="font-family:var(--mono);font-size:.75rem;color:var(--muted2)">{{ c.num_presupuestos }}</td>
+        <td style="font-family:var(--mono);font-size:.78rem;color:var(--accent)">
+          {% if c.volumen > 0 %}{{ "%.0f"|format(c.volumen) }}€{% else %}—{% endif %}
+        </td>
+        <td>
+          {% if c.estado == 'activo' %}<span class="badge badge-green">Activo</span>
+          {% elif c.estado == 'lead' %}<span class="badge badge-yellow">Lead</span>
+          {% elif c.estado == 'inactivo' %}<span class="badge badge-muted">Inactivo</span>
+          {% endif %}
+        </td>
+        <td style="text-align:right">
+          <a href="/cliente/{{ c.id }}" class="btn btn-sm">Ver →</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted);font-family:var(--mono);font-size:.6rem">No hay clientes todavía — <a href="/cliente/nuevo" style="color:var(--accent)">añade el primero</a></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+function filtrar() {
+  const q = document.getElementById('buscador').value.toLowerCase();
+  document.querySelectorAll('#tabla-clientes tbody tr[data-search]').forEach(row => {
+    row.style.display = row.dataset.search.includes(q) ? '' : 'none';
+  });
+}
+function filtrarEstado(estado) {
+  document.querySelectorAll('#tabla-clientes tbody tr[data-estado]').forEach(row => {
+    row.style.display = (!estado || row.dataset.estado === estado) ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}

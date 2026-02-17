@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}· {% if cliente %}Editar cliente{% else %}Nuevo cliente{% endif %}{% endblock %}
+
+{% block topbar %}
+<div>
+  <div class="topbar-title">{% if cliente %}EDITAR CLIENTE{% else %}NUEVO CLIENTE{% endif %}</div>
+  <div class="topbar-sub">{% if cliente %}{{ cliente.nombre }}{% else %}Añadir a la base de datos{% endif %}</div>
+</div>
+<div class="topbar-right">
+  <a href="{% if cliente %}/cliente/{{ cliente.id }}{% else %}/clientes{% endif %}" class="btn">← Cancelar</a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:680px">
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">{% if cliente %}Datos del cliente{% else %}Datos del nuevo cliente{% endif %}</span>
+    </div>
+    <div class="panel-body">
+      <form method="POST">
+        <div class="form-grid cols-2">
+          <div class="form-field">
+            <label class="form-label">Nombre *</label>
+            <input name="nombre" class="form-input" value="{{ cliente.nombre if cliente else '' }}" placeholder="Nombre completo" required/>
+          </div>
+          <div class="form-field">
+            <label class="form-label">Empresa</label>
+            <input name="empresa" class="form-input" value="{{ cliente.empresa if cliente else '' }}" placeholder="Nombre de la empresa"/>
+          </div>
+        </div>
+        <div class="form-grid cols-2">
+          <div class="form-field">
+            <label class="form-label">Email</label>
+            <input name="email" type="email" class="form-input" value="{{ cliente.email if cliente else '' }}" placeholder="correo@empresa.es"/>
+          </div>
+          <div class="form-field">
+            <label class="form-label">Teléfono</label>
+            <input name="telefono" class="form-input" value="{{ cliente.telefono if cliente else '' }}" placeholder="600 000 000"/>
+          </div>
+        </div>
+        <div class="form-grid cols-2">
+          <div class="form-field">
+            <label class="form-label">Sector</label>
+            <select name="sector" class="form-select">
+              <option value="">— Seleccionar —</option>
+              {% for s in ['Maquinaria', 'Elevación', 'Carpintería metálica', 'Metalurgia', 'Sector Industrial', 'Fabricación mecánica', 'Automoción', 'Otro'] %}
+              <option value="{{ s }}" {% if cliente and cliente.sector == s %}selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-field">
+            <label class="form-label">Estado</label>
+            <select name="estado" class="form-select">
+              <option value="lead" {% if not cliente or cliente.estado == 'lead' %}selected{% endif %}>Lead</option>
+              <option value="activo" {% if cliente and cliente.estado == 'activo' %}selected{% endif %}>Activo</option>
+              <option value="inactivo" {% if cliente and cliente.estado == 'inactivo' %}selected{% endif %}>Inactivo</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="form-field">
+            <label class="form-label">Notas internas</label>
+            <textarea name="notas" class="form-textarea" placeholder="Observaciones, condiciones especiales, forma de pago preferida...">{{ cliente.notas if cliente else '' }}</textarea>
+          </div>
+        </div>
+        <div style="display:flex;gap:.6rem;margin-top:.5rem">
+          <button type="submit" class="btn btn-primary">{% if cliente %}Guardar cambios{% else %}Crear cliente{% endif %}</button>
+          <a href="{% if cliente %}/cliente/{{ cliente.id }}{% else %}/clientes{% endif %}" class="btn">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

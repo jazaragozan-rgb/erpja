@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% block title %}· {{ proyecto.referencia }}{% endblock %}
+{% block topbar %}
+<div><div class="topbar-title">{{ proyecto.referencia }}</div><div class="topbar-sub">{{ proyecto.nombre }}</div></div>
+<div class="topbar-right">
+  <a href="/proyectos" class="btn">← Proyectos</a>
+  <button class="btn" onclick="document.getElementById('modal-editar').style.display='flex'">Editar</button>
+</div>
+{% endblock %}
+{% block content %}
+
+<!-- Header -->
+<div class="detail-header">
+  <div>
+    <div style="font-family:var(--mono);font-size:.55rem;color:var(--accent);margin-bottom:.3rem">{{ proyecto.referencia }} · {{ proyecto.servicio }}</div>
+    <div class="detail-name">{{ proyecto.nombre }}</div>
+    <div class="detail-company">{{ proyecto.cliente_empresa or proyecto.cliente_nombre }}</div>
+    <div class="detail-meta">
+      <div class="detail-meta-item">📅 Inicio: <span>{{ proyecto.fecha_inicio or '—' }}</span></div>
+      <div class="detail-meta-item">🏁 Entrega: <span>{{ proyecto.fecha_entrega or '—' }}</span></div>
+      <div class="detail-meta-item">💶 Importe: <span>{{ "%.2f"|format(proyecto.importe) }}€</span></div>
+      <div class="detail-meta-item">⏱ Horas: <span>{{ horas_total }}/{{ proyecto.horas_estimadas }}h</span></div>
+    </div>
+  </div>
+  <div style="text-align:right">
+    <span class="badge {% if proyecto.estado=='en_diseno' %}badge-orange{% elif proyecto.estado=='en_fabricacion' %}badge-green{% elif proyecto.estado=='revision_cliente' %}badge-blue{% elif proyecto.estado=='entregado' %}badge-muted{% else %}badge-yellow{% endif %}" style="font-size:.6rem;padding:.3rem .8rem">
+      {{ proyecto.estado|replace('_',' ')|upper }}
+    </span>
+    <div style="margin-top:1rem">
+      <div style="font-family:var(--mono);font-size:.55rem;color:var(--muted);margin-bottom:.4rem">PROGRESO</div>
+      <div style="display:flex;align-items:center;gap:.6rem">
+        <input type="range" id="prog-slider" min="0" max="100" value="{{ proyecto.progreso }}" oninput="updateProg(this.value)"
+          style="width:120px;accent-color:var(--accent)"/>
+        <span id="prog-val" style="font-family:var(--mono);font-size:.75rem;color:var(--accent)">{{ proyecto.progreso }}%</span>
+      </div>
+      <div style="background:var(--border);height:4px;margin-top:.5rem;width:160px">
+        <div id="prog-bar" style="height:4px;background:var(--accent);width:{{ proyecto.progreso }}%"></div>
+      </div>
+      <div style="margin-top:.6rem">
+        <select id="estado-sel" onchange="updateEstado()" style="background:var(--card);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:.55rem;padding:.3rem .5rem;outline:none;width:160px">
+          <option value="en_diseno" {% if proyecto.estado=='en_diseno' %}selected{% endif %}>En diseño</option>
+          <option value="en_fabricacion" {% if proyecto.estado=='en_fabricacion' %}selected{% endif %}>En fabricación</option>
+          <option value="revision_cliente" {% if proyecto.estado=='revision_cliente' %}selected{% endif %}>Revisión cliente</option>
+          <option value="activo" {% if proyecto.estado=='activo' %}selected{% endif %}>Activo</option>
+          <option value="entregado" {% if proyecto.estado=='entregado' %}selected{% endif %}>Entregado</option>
+          <option value="cancelado" {% if proyecto.estado=='cancelado' %}selected{% endif %}>Cancelado</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if proyecto.notas %}
+<div class="panel" style="margin-bottom:1.2rem"><div class="panel-body" style="display:flex;gap:.8rem">
+  <span style="color:var(--accent)">📌</span><span style="font-size:.82rem;color:var(--muted2)">{{ proyecto.notas }}</span>
+</div></div>
+{% endif %}
+
+<div class="grid-60-40">
+  <div>
+    <!-- HORAS -->
+    <div class="panel" style="margin-bottom:1.2rem">
+      <div class="panel-header">
+        <span class="panel-title">Registro de horas</span>
+        <div style="display:flex;gap:.8rem;align-items:center">
+          <span style="font-family:var(--mono);font-size:.6rem;color:var(--accent)">{{ horas_total }}h registradas / {{ proyecto.horas_estimadas }}h estimadas</span>
+          <button class="btn btn-sm btn-primary" onclick="document.getElementById('modal-horas').style.display='flex'">+ Añadir</button>
+        </div>
+      </div>
+      {% if horas %}
+      <table class="table">
+        <thead><tr><th>Fecha</th><th>Horas</th><th>Descripción</th><th></th></tr></thead>
+        <tbody>
+          {% for h in horas %}
+          <tr>
+            <td style="font-family:var(--mono);font-size:.7rem">{{ h.fecha }}</td>
+            <td><span style="font-family:var(--mono);font-size:.75rem;color:var(--accent)">{{ h.horas }}h</span></td>
+            <td style="color:var(--muted2);font-size:.78rem">{{ h.descripcion or '—' }}</td>
+            <td>
+              <form method="POST" action="/horas/{{ h.id }}/eliminar" onsubmit="return confirm('¿Eliminar este registro?')">
+                <button type="submit" class="btn btn-sm btn-danger">✕</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">Sin horas registradas aún</div>
+      {% endif %}
+      <!-- Progress bar horas -->
+      {% if proyecto.horas_estimadas > 0 %}
+      <div style="padding:.8rem 1.1rem;border-top:1px solid var(--border)">
+        {% set pct = [((horas_total / proyecto.horas_estimadas) * 100)|int, 100]|min %}
+        <div style="display:flex;justify-content:space-between;margin-bottom:.3rem">
+          <span style="font-family:var(--mono);font-size:.52rem;color:var(--muted)">Consumo de horas</span>
+          <span style="font-family:var(--mono);font-size:.52rem;color:{% if pct > 90 %}var(--red){% elif pct > 70 %}var(--yellow){% else %}var(--accent){% endif %}">{{ pct }}%</span>
+        </div>
+        <div style="background:var(--border);height:4px">
+          <div style="height:4px;background:{% if pct>90 %}var(--red){% elif pct>70 %}var(--yellow){% else %}var(--accent){% endif %};width:{{ pct }}%"></div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- PEDIDOS A PROVEEDORES -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Pedidos a proveedores</span>
+        <button class="btn btn-sm btn-primary" onclick="document.getElementById('modal-pedido').style.display='flex'">+ Pedido</button>
+      </div>
+      {% if pedidos %}
+      <div style="padding:0">
+        {% for p in pedidos %}
+        <div style="display:flex;align-items:center;gap:.8rem;padding:.65rem .9rem;border-bottom:1px solid var(--border)">
+          <div style="flex:1">
+            <div style="font-family:var(--mono);font-size:.6rem;color:var(--accent)">{{ p.numero }}</div>
+            <div style="font-size:.82rem;margin-top:.1rem">{{ p.concepto }}</div>
+            <div style="font-family:var(--mono);font-size:.52rem;color:var(--muted);margin-top:.1rem">
+              {{ p.proveedor_nombre }} · {{ p.proveedor_empresa or '' }} · Entrega: {{ p.fecha_entrega_esperada or '—' }}
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-family:var(--mono);font-size:.75rem;color:#fff">{{ "%.2f"|format(p.importe) }}€</div>
+            <span class="badge {% if p.estado=='entregado' %}badge-green{% elif p.estado=='en_produccion' %}badge-blue{% elif p.estado=='en_transito' %}badge-yellow{% else %}badge-muted{% endif %}" style="margin-top:.3rem">{{ p.estado|replace('_',' ') }}</span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty">Sin pedidos a proveedores</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:1.2rem">
+    <!-- Resumen económico -->
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Resumen económico</span></div>
+      <div class="panel-body">
+        {% set coste_prov = pedidos|sum(attribute='importe') %}
+        {% set margen = proyecto.importe - coste_prov %}
+        {% set margen_pct = ((margen / proyecto.importe * 100)|int) if proyecto.importe > 0 else 0 %}
+        <div style="display:flex;flex-direction:column;gap:.5rem">
+          <div style="display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border)">
+            <span style="font-size:.8rem;color:var(--muted2)">Importe cliente</span>
+            <span style="font-family:var(--mono);font-size:.8rem;color:var(--accent)">{{ "%.2f"|format(proyecto.importe) }}€</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border)">
+            <span style="font-size:.8rem;color:var(--muted2)">Coste proveedores</span>
+            <span style="font-family:var(--mono);font-size:.8rem;color:var(--red)">-{{ "%.2f"|format(coste_prov) }}€</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:.5rem;background:rgba(232,108,47,.08)">
+            <span style="font-size:.85rem;font-weight:500">Margen bruto</span>
+            <span style="font-family:var(--mono);font-size:.9rem;color:var(--accent)">{{ "%.2f"|format(margen) }}€ ({{ margen_pct }}%)</span>
+          </div>
+        </div>
+        <div style="margin-top:.8rem">
+          <div style="font-family:var(--mono);font-size:.52rem;color:var(--muted);margin-bottom:.3rem">Margen</div>
+          <div style="background:var(--border);height:4px">
+            <div style="height:4px;background:{% if margen_pct>50 %}var(--green){% elif margen_pct>25 %}var(--yellow){% else %}var(--red){% endif %};width:{{ margen_pct }}%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cliente info -->
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Cliente</span><a href="/cliente/{{ proyecto.cliente_id }}" class="panel-action">Ver ficha →</a></div>
+      <div class="panel-body">
+        <div style="font-family:var(--display);font-size:1.2rem;color:#fff">{{ proyecto.cliente_nombre }}</div>
+        <div style="font-size:.82rem;color:var(--muted2);margin-top:.2rem">{{ proyecto.cliente_empresa or '' }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL AÑADIR HORAS -->
+<div id="modal-horas" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--border);padding:2rem;width:440px;max-width:95vw">
+    <div style="display:flex;justify-content:space-between;margin-bottom:1.2rem">
+      <span style="font-family:var(--display);font-size:1.2rem;color:#fff">REGISTRAR HORAS</span>
+      <button onclick="document.getElementById('modal-horas').style.display='none'" style="background:none;border:none;color:var(--muted);cursor:pointer">✕</button>
+    </div>
+    <form method="POST" action="/horas/nueva/{{ proyecto.id }}">
+      <div class="form-grid cols-2">
+        <div class="form-field"><label class="form-label">Fecha</label><input name="fecha" type="date" class="form-input" value="{{ today }}" required/></div>
+        <div class="form-field"><label class="form-label">Horas</label><input name="horas" type="number" step="0.5" min="0.5" class="form-input" placeholder="2.5" required/></div>
+      </div>
+      <div class="form-grid"><div class="form-field"><label class="form-label">Descripción</label><input name="descripcion" class="form-input" placeholder="Ej: Modelado 3D componente principal"/></div></div>
+      <div style="display:flex;gap:.6rem;margin-top:.5rem">
+        <button type="submit" class="btn btn-primary">Registrar</button>
+        <button type="button" onclick="document.getElementById('modal-horas').style.display='none'" class="btn">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL PEDIDO PROVEEDOR -->
+<div id="modal-pedido" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--border);padding:2rem;width:480px;max-width:95vw">
+    <div style="display:flex;justify-content:space-between;margin-bottom:1.2rem">
+      <span style="font-family:var(--display);font-size:1.2rem;color:#fff">NUEVO PEDIDO</span>
+      <button onclick="document.getElementById('modal-pedido').style.display='none'" style="background:none;border:none;color:var(--muted);cursor:pointer">✕</button>
+    </div>
+    <form method="POST" action="/pedido/nuevo/0" id="form-pedido">
+      <div class="form-grid"><div class="form-field"><label class="form-label">Proveedor *</label>
+        <select name="proveedor_id" class="form-select" required onchange="updatePedidoAction(this.value)">
+          <option value="">Seleccionar proveedor...</option>
+          {% for pv in proveedores %}<option value="{{ pv.id }}">{{ pv.nombre }} — {{ pv.especialidad }}</option>{% endfor %}
+        </select>
+      </div></div>
+      <div class="form-grid"><div class="form-field"><label class="form-label">Concepto *</label><input name="concepto" class="form-input" placeholder="Ej: Mecanizado CNC pieza soporte" required/></div></div>
+      <div class="form-grid cols-2">
+        <div class="form-field"><label class="form-label">Importe (€)</label><input name="importe" type="number" step="0.01" class="form-input" placeholder="0"/></div>
+        <div class="form-field"><label class="form-label">Estado</label>
+          <select name="estado" class="form-select">
+            <option value="pendiente">Pendiente</option><option value="en_produccion">En producción</option>
+            <option value="en_transito">En tránsito</option><option value="entregado">Entregado</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-grid cols-2">
+        <div class="form-field"><label class="form-label">Fecha pedido</label><input name="fecha_pedido" type="date" class="form-input" value="{{ today }}"/></div>
+        <div class="form-field"><label class="form-label">Entrega esperada</label><input name="fecha_entrega_esperada" type="date" class="form-input"/></div>
+      </div>
+      <input type="hidden" name="proyecto_id" value="{{ proyecto.id }}"/>
+      <div style="display:flex;gap:.6rem;margin-top:.5rem">
+        <button type="submit" class="btn btn-primary">Crear pedido</button>
+        <button type="button" onclick="document.getElementById('modal-pedido').style.display='none'" class="btn">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL EDITAR -->
+<div id="modal-editar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--border);padding:2rem;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;margin-bottom:1.2rem">
+      <span style="font-family:var(--display);font-size:1.2rem;color:#fff">EDITAR PROYECTO</span>
+      <button onclick="document.getElementById('modal-editar').style.display='none'" style="background:none;border:none;color:var(--muted);cursor:pointer">✕</button>
+    </div>
+    <form method="POST" action="/proyecto/{{ proyecto.id }}/editar">
+      <div class="form-grid"><div class="form-field"><label class="form-label">Nombre</label><input name="nombre" class="form-input" value="{{ proyecto.nombre }}" required/></div></div>
+      <div class="form-grid cols-2">
+        <div class="form-field"><label class="form-label">Servicio</label>
+          <select name="servicio" class="form-select">
+            {% for s in ['Diseño mecánico','Fabricación integral','Renderizado 3D','Consultoría','Apoyo técnico','Planos técnicos'] %}
+            <option {% if proyecto.servicio==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-field"><label class="form-label">Estado</label>
+          <select name="estado" class="form-select">
+            {% for s in [('en_diseno','En diseño'),('en_fabricacion','En fabricación'),('revision_cliente','Revisión cliente'),('activo','Activo'),('entregado','Entregado'),('cancelado','Cancelado')] %}
+            <option value="{{ s[0] }}" {% if proyecto.estado==s[0] %}selected{% endif %}>{{ s[1] }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="form-grid cols-2">
+        <div class="form-field"><label class="form-label">Fecha inicio</label><input name="fecha_inicio" type="date" class="form-input" value="{{ proyecto.fecha_inicio or '' }}"/></div>
+        <div class="form-field"><label class="form-label">Fecha entrega</label><input name="fecha_entrega" type="date" class="form-input" value="{{ proyecto.fecha_entrega or '' }}"/></div>
+      </div>
+      <div class="form-grid cols-2">
+        <div class="form-field"><label class="form-label">Importe (€)</label><input name="importe" type="number" step="0.01" class="form-input" value="{{ proyecto.importe }}"/></div>
+        <div class="form-field"><label class="form-label">Progreso (%)</label><input name="progreso" type="number" min="0" max="100" class="form-input" value="{{ proyecto.progreso }}"/></div>
+      </div>
+      <div class="form-grid"><div class="form-field"><label class="form-label">Horas estimadas</label><input name="horas_estimadas" type="number" step="0.5" class="form-input" value="{{ proyecto.horas_estimadas }}"/></div></div>
+      <div class="form-grid"><div class="form-field"><label class="form-label">Notas</label><textarea name="notas" class="form-textarea">{{ proyecto.notas or '' }}</textarea></div></div>
+      <div style="display:flex;gap:.6rem;margin-top:.5rem">
+        <button type="submit" class="btn btn-primary">Guardar cambios</button>
+        <button type="button" onclick="document.getElementById('modal-editar').style.display='none'" class="btn">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function updateProg(v) {
+  document.getElementById('prog-val').textContent = v+'%';
+  document.getElementById('prog-bar').style.width = v+'%';
+}
+function updateEstado() {
+  const progreso = document.getElementById('prog-slider').value;
+  const estado   = document.getElementById('estado-sel').value;
+  fetch('/proyecto/{{ proyecto.id }}/progreso', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({progreso: parseInt(progreso), estado: estado})
+  });
+}
+document.getElementById('prog-slider').addEventListener('change', updateEstado);
+function updatePedidoAction(provId) {
+  if (provId) document.getElementById('form-pedido').action = '/pedido/nuevo/'+provId;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}· Facturación{% endblock %}
+{% block topbar %}
+<div><div class="topbar-title">FACTURACIÓN</div><div class="topbar-sub">Facturas, cobros y resumen fiscal</div></div>
+<div class="topbar-right">
+  <button class="btn btn-primary" onclick="document.getElementById('modal-factura').style.display='flex'">+ Nueva factura</button>
+</div>
+{% endblock %}
+{% block content %}
+<div class="kpi-row">
+  <div class="kpi green"><div class="kpi-label">Cobrado este mes</div><div class="kpi-value">{{ "%.0f"|format(stats.cobrado_mes) }}€</div></div>
+  <div class="kpi yellow"><div class="kpi-label">Pendiente de cobro</div><div class="kpi-value">{{ "%.0f"|format(stats.pendiente) }}€</div></div>
+  <div class="kpi red"><div class="kpi-label">Facturas vencidas</div><div class="kpi-value">{{ stats.vencidas }}</div></div>
+  <div class="kpi orange"><div class="kpi-label">Base trimestre</div><div class="kpi-value">{{ "%.0f"|format(stats.base_trimestre) }}€</div></div>
+</div>
+
+<div class="grid-60-40">
+  <!-- FACTURAS -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Todas las facturas</span>
+      <div style="display:flex;gap:.5rem">
+        <select onchange="filtrarFacturas(this.value)" style="background:var(--card);border:1px solid var(--border);color:var(--muted2);font-family:var(--mono);font-size:.55rem;padding:.3rem .5rem;outline:none">
+          <option value="">Todos</option><option value="pendiente">Pendientes</option>
+          <option value="cobrada">Cobradas</option><option value="vencida">Vencidas</option>
+        </select>
+      </div>
+    </div>
+    <table class="table" id="tabla-facturas">
+      <thead><tr><th>Número</th><th>Cliente</th><th>Concepto</th><th>Base</th><th>Total</th><th>Vencimiento</th><th>Estado</th><th></th></tr></thead>
+      <tbody>
+        {% for f in facturas %}
+        {% set total = f.base + (f.base * f.iva / 100) - (f.base * f.irpf / 100) %}
+        {% set vencida = f.estado == 'pendiente' and f.fecha_vencimiento and f.fecha_vencimiento < today %}
+        <tr data-estado="{{ 'vencida' if vencida else f.estado }}">
+          <td><span style="font-family:var(--mono);font-size:.62rem;color:var(--accent)">{{ f.numero }}</span></td>
+          <td>
+            <div style="font-size:.8rem">{{ f.cliente_nombre }}</div>
+            {% if f.cliente_empresa %}<div style="font-size:.7rem;color:var(--muted2)">{{ f.cliente_empresa }}</div>{% endif %}
+          </td>
+          <td style="color:var(--muted2);font-size:.78rem;max-width:140px">
+            {{ f.concepto[:40] }}{% if f.concepto|length > 40 %}...{% endif %}
+            {% if f.proyecto_ref %}<div style="font-family:var(--mono);font-size:.52rem;color:var(--muted)">{{ f.proyecto_ref }}</div>{% endif %}
+          </td>
+          <td style="font-family:var(--mono);font-size:.72rem">{{ "%.2f"|format(f.base) }}€</td>
+          <td style="font-family:var(--mono);font-size:.78rem;color:#fff">{{ "%.2f"|format(total) }}€</td>
+          <td style="font-family:var(--mono);font-size:.65rem;color:{% if vencida %}var(--red){% else %}var(--muted2){% endif %}">{{ f.fecha_vencimiento or '—' }}</td>
+          <td>
+            {% if vencida %}<span class="badge badge-red">Vencida</span>
+            {% elif f.estado == 'cobrada' %}<span class="badge badge-green">Cobrada</span>
+            {% else %}<span class="badge badge-yellow">Pendiente</span>{% endif %}
+          </td>
+          <td>
+            <div style="display:flex;gap:.3rem">
+              <a href="/factura/{{ f.id }}/pdf" class="btn btn-sm" title="Descargar PDF">PDF</a>
+              {% if f.estado != 'cobrada' %}
+              <button class="btn btn-sm" onclick="cobrar({{ f.id }}, this)" title="Marcar cobrada">✓</button>
+              {% endif %}
+              <form method="POST" action="/factura/{{ f.id }}/eliminar" onsubmit="return confirm('¿Eliminar factura?')" style="display:inline">
+                <button type="submit" class="btn btn-sm btn-danger">✕</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- FISCAL + NUEVA FACTURA -->
+  <div style="display:flex;flex-direction:column;gap:1.2rem">
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Resumen fiscal (trimestre)</span></div>
+      <div class="panel-body">
+        {% set iva_r = stats.base_trimestre * 0.21 %}
+        {% set irpf_r = stats.base_trimestre * 0.15 %}
+        <div style="display:flex;flex-direction:column;gap:.5rem">
+          <div style="display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border)">
+            <span style="font-size:.8rem;color:var(--muted2)">Base imponible</span>
+            <span style="font-family:var(--mono);font-size:.8rem">{{ "%.2f"|format(stats.base_trimestre) }}€</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border)">
+            <span style="font-size:.8rem;color:var(--muted2)">IVA repercutido (21%)</span>
+            <span style="font-family:var(--mono);font-size:.8rem;color:var(--green)">+{{ "%.2f"|format(iva_r) }}€</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border)">
+            <span style="font-size:.8rem;color:var(--muted2)">IRPF retenido (15%)</span>
+            <span style="font-family:var(--mono);font-size:.8rem;color:var(--red)">-{{ "%.2f"|format(irpf_r) }}€</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:.5rem;background:rgba(232,108,47,.08)">
+            <span style="font-size:.85rem;font-weight:500">Neto a cobrar</span>
+            <span style="font-family:var(--mono);font-size:.9rem;color:var(--accent)">{{ "%.2f"|format(stats.base_trimestre + iva_r - irpf_r) }}€</span>
+          </div>
+        </div>
+        <div style="margin-top:.8rem;font-family:var(--mono);font-size:.55rem;color:var(--muted);border-left:2px solid var(--border);padding-left:.6rem">
+          Datos orientativos. Consulta con tu gestor para la declaración trimestral.
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Nueva factura rápida</span></div>
+      <div class="panel-body">
+        <button class="btn btn-primary" style="width:100%" onclick="document.getElementById('modal-factura').style.display='flex'">+ Crear factura completa</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL NUEVA FACTURA -->
+<div id="modal-factura" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--border);padding:2rem;width:540px;max-width:95vw;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;margin-bottom:1.5rem">
+      <span style="font-family:var(--display);font-size:1.4rem;color:#fff">NUEVA FACTURA</span>
+      <button onclick="document.getElementById('modal-factura').style.display='none'" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2rem">✕</button>
+    </div>
+    <form method="POST" action="/factura/nueva">
+      <div class="form-grid cols-2">
+        <div class="form-field"><label class="form-label">Cliente *</label>
+          <select name="cliente_id" class="form-select" required>
+            <option value="">Seleccionar...</option>
+            {% for cl in clientes %}<option value="{{ cl.id }}">{{ cl.nombre }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-field"><label class="form-label">Proyecto (opcional)</label>
+          <select name="proyecto_id" class="form-select">
+            <option value="">— Sin proyecto —</option>
+            {% for p in proyectos %}<option value="{{ p.id }}">{{ p.referencia }} · {{ p.nombre[:30] }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="form-grid"><div class="form-field"><label class="form-label">Concepto *</label>
+        <input name="concepto" class="form-input" placeholder="Ej: Diseño mecánico pieza soporte CNC" required/>
+      </div></div>
+      <div class="form-grid cols-2">
+        <div class="form-field"><label class="form-label">Base imponible (€) *</label>
+          <input name="base" id="base-input" type="number" step="0.01" class="form-input" placeholder="0.00" required oninput="calcTotales()"/>
+        </div>
+        <div class="form-field"><label class="form-label">Estado</label>
+          <select name="estado" class="form-select">
+            <option value="pendiente">Pendiente</option><option value="cobrada">Cobrada</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-grid cols-2">
+        <div class="form-field"><label class="form-label">IVA (%)</label><input name="iva" id="iva-input" type="number" class="form-input" value="21" oninput="calcTotales()"/></div>
+        <div class="form-field"><label class="form-label">IRPF (%)</label><input name="irpf" id="irpf-input" type="number" class="form-input" value="15" oninput="calcTotales()"/></div>
+      </div>
+      <div class="form-grid cols-2">
+        <div class="form-field"><label class="form-label">Fecha emisión</label><input name="fecha_emision" type="date" class="form-input" value="{{ today }}"/></div>
+        <div class="form-field"><label class="form-label">Fecha vencimiento</label><input name="fecha_vencimiento" type="date" class="form-input"/></div>
+      </div>
+      <!-- Preview totales -->
+      <div style="background:var(--card);border:1px solid var(--border);padding:.8rem 1rem;margin:.5rem 0;display:flex;gap:2rem;flex-wrap:wrap">
+        <div><div style="font-family:var(--mono);font-size:.48rem;color:var(--muted);text-transform:uppercase;margin-bottom:.2rem">Base</div><div id="p-base" style="font-family:var(--mono);font-size:.9rem">0,00€</div></div>
+        <div><div style="font-family:var(--mono);font-size:.48rem;color:var(--muted);text-transform:uppercase;margin-bottom:.2rem">+IVA</div><div id="p-iva" style="font-family:var(--mono);font-size:.9rem;color:var(--green)">0,00€</div></div>
+        <div><div style="font-family:var(--mono);font-size:.48rem;color:var(--muted);text-transform:uppercase;margin-bottom:.2rem">-IRPF</div><div id="p-irpf" style="font-family:var(--mono);font-size:.9rem;color:var(--red)">0,00€</div></div>
+        <div style="margin-left:auto"><div style="font-family:var(--mono);font-size:.48rem;color:var(--muted);text-transform:uppercase;margin-bottom:.2rem">Total</div><div id="p-total" style="font-family:var(--mono);font-size:1.1rem;color:var(--accent)">0,00€</div></div>
+      </div>
+      <div style="display:flex;gap:.6rem">
+        <button type="submit" class="btn btn-primary">Crear factura</button>
+        <button type="button" onclick="document.getElementById('modal-factura').style.display='none'" class="btn">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const fmt = v => v.toFixed(2).replace('.',',')+' €';
+function calcTotales() {
+  const base = parseFloat(document.getElementById('base-input').value)||0;
+  const iva  = parseFloat(document.getElementById('iva-input').value)||0;
+  const irpf = parseFloat(document.getElementById('irpf-input').value)||0;
+  document.getElementById('p-base').textContent  = fmt(base);
+  document.getElementById('p-iva').textContent   = '+'+fmt(base*iva/100);
+  document.getElementById('p-irpf').textContent  = '-'+fmt(base*irpf/100);
+  document.getElementById('p-total').textContent = fmt(base + base*iva/100 - base*irpf/100);
+}
+function cobrar(id, btn) {
+  if (!confirm('¿Marcar esta factura como cobrada?')) return;
+  fetch('/factura/'+id+'/cobrar',{method:'POST'}).then(()=>location.reload());
+}
+function filtrarFacturas(estado) {
+  document.querySelectorAll('#tabla-facturas tbody tr').forEach(r => {
+    r.style.display = (!estado || r.dataset.estado===estado) ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}· {{ cliente.nombre }}{% endblock %}
+
+{% block topbar %}
+<div>
+  <div class="topbar-title">{{ cliente.nombre|upper }}</div>
+  <div class="topbar-sub">{{ cliente.empresa or 'Cliente' }} · Ficha de cliente</div>
+</div>
+<div class="topbar-right">
+  <a href="/clientes" class="btn">← Volver</a>
+  <a href="/cliente/{{ cliente.id }}/editar" class="btn">Editar</a>
+  <a href="/presupuesto/nuevo/{{ cliente.id }}" class="btn btn-primary">+ Presupuesto</a>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<!-- HEADER CLIENTE -->
+<div class="detail-header">
+  <div>
+    <div class="detail-name">{{ cliente.nombre }}</div>
+    <div class="detail-company">{{ cliente.empresa or '' }}</div>
+    <div class="detail-meta">
+      {% if cliente.email %}<div class="detail-meta-item">✉ <span>{{ cliente.email }}</span></div>{% endif %}
+      {% if cliente.telefono %}<div class="detail-meta-item">📞 <span>{{ cliente.telefono }}</span></div>{% endif %}
+      {% if cliente.sector %}<div class="detail-meta-item">🏭 <span>{{ cliente.sector }}</span></div>{% endif %}
+      <div class="detail-meta-item">📅 Alta: <span>{{ cliente.fecha_alta }}</span></div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.8rem">
+    {% if cliente.estado == 'activo' %}<span class="badge badge-green" style="font-size:.6rem;padding:.3rem .7rem">● Activo</span>
+    {% elif cliente.estado == 'lead' %}<span class="badge badge-yellow" style="font-size:.6rem;padding:.3rem .7rem">● Lead</span>
+    {% elif cliente.estado == 'inactivo' %}<span class="badge badge-muted" style="font-size:.6rem;padding:.3rem .7rem">● Inactivo</span>{% endif %}
+    <form method="POST" action="/cliente/{{ cliente.id }}/eliminar" onsubmit="return confirm('¿Eliminar este cliente y todos sus datos?')">
+      <button type="submit" class="btn btn-danger btn-sm">Eliminar</button>
+    </form>
+  </div>
+</div>
+
+{% if cliente.notas %}
+<div class="panel" style="margin-bottom:1.2rem">
+  <div class="panel-body" style="display:flex;gap:.8rem;align-items:flex-start">
+    <span style="color:var(--accent);font-size:.9rem">📌</span>
+    <span style="font-size:.82rem;color:var(--muted2)">{{ cliente.notas }}</span>
+  </div>
+</div>
+{% endif %}
+
+<div class="grid-60-40">
+
+  <!-- PRESUPUESTOS -->
+  <div>
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Presupuestos</span>
+        <a href="/presupuesto/nuevo/{{ cliente.id }}" class="btn btn-sm btn-primary">+ Nuevo</a>
+      </div>
+      {% if presupuestos %}
+      <div>
+        {% for p in presupuestos %}
+        <div class="pre-item">
+          <div class="pre-num">{{ p.numero }}</div>
+          <div>
+            <div class="pre-desc">{{ p.descripcion }}</div>
+            <div style="font-family:var(--mono);font-size:.52rem;color:var(--muted);margin-top:.15rem">
+              {{ p.servicio }} · Emitido {{ p.fecha_emision }} · Válido hasta {{ p.fecha_validez }}
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.4rem">
+            <div class="pre-amount">{{ "%.2f"|format(p.importe) }}€</div>
+            <select class="badge-select" data-id="{{ p.id }}" onchange="cambiarEstado(this)"
+              style="background:var(--card);border:1px solid var(--border);color:var(--muted2);font-family:var(--mono);font-size:.48rem;padding:.15rem .3rem;outline:none;">
+              <option value="borrador" {% if p.estado=='borrador' %}selected{% endif %}>Borrador</option>
+              <option value="enviado" {% if p.estado=='enviado' %}selected{% endif %}>Enviado</option>
+              <option value="aceptado" {% if p.estado=='aceptado' %}selected{% endif %}>Aceptado</option>
+              <option value="rechazado" {% if p.estado=='rechazado' %}selected{% endif %}>Rechazado</option>
+            </select>
+          </div>
+        </div>
+        {% if p.notas %}
+        <div style="padding:.3rem .8rem .5rem 1.6rem;font-size:.72rem;color:var(--muted);border-bottom:1px solid var(--border)">
+          💬 {{ p.notas }}
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+      {% else %}
+      <div style="padding:2rem;text-align:center;font-family:var(--mono);font-size:.58rem;color:var(--muted)">
+        Sin presupuestos todavía —
+        <a href="/presupuesto/nuevo/{{ cliente.id }}" style="color:var(--accent)">crear el primero</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- HISTORIAL + NUEVA COMUNICACIÓN -->
+  <div style="display:flex;flex-direction:column;gap:1.2rem">
+
+    <!-- Nueva comunicación -->
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Registrar comunicación</span></div>
+      <div class="panel-body">
+        <form method="POST" action="/comunicacion/nueva/{{ cliente.id }}">
+          <div class="form-grid cols-2" style="margin-bottom:.7rem">
+            <div class="form-field">
+              <label class="form-label">Tipo</label>
+              <select name="tipo" class="form-select">
+                <option value="email">📧 Email</option>
+                <option value="llamada">📞 Llamada</option>
+                <option value="reunion">🤝 Reunión</option>
+                <option value="whatsapp">💬 WhatsApp</option>
+                <option value="presupuesto">📄 Presupuesto</option>
+                <option value="otro">Otro</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label class="form-label">Asunto</label>
+              <input name="asunto" class="form-input" placeholder="Ej: Seguimiento presupuesto" required/>
+            </div>
+          </div>
+          <div class="form-field" style="margin-bottom:.7rem">
+            <label class="form-label">Notas</label>
+            <textarea name="contenido" class="form-textarea" placeholder="Resumen de la comunicación..." style="min-height:60px"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%">Registrar →</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Historial -->
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Historial de comunicaciones</span></div>
+      <div class="panel-body" style="padding:.7rem 1rem">
+        {% if comunicaciones %}
+        <div class="timeline">
+          {% for com in comunicaciones %}
+          <div class="tl-item">
+            <div class="tl-dot {% if com.tipo == 'email' %}orange{% elif com.tipo in ['llamada','reunion'] %}green{% elif com.tipo == 'presupuesto' %}blue{% else %}muted{% endif %}"></div>
+            <div class="tl-date">{{ com.fecha }}</div>
+            <div class="tl-type">
+              {% if com.tipo == 'email' %}📧 Email
+              {% elif com.tipo == 'llamada' %}📞 Llamada
+              {% elif com.tipo == 'reunion' %}🤝 Reunión
+              {% elif com.tipo == 'whatsapp' %}💬 WhatsApp
+              {% elif com.tipo == 'presupuesto' %}📄 Presupuesto
+              {% else %}· {{ com.tipo }}{% endif %}
+            </div>
+            <div class="tl-text"><strong>{{ com.asunto }}</strong></div>
+            {% if com.contenido %}<div class="tl-text" style="margin-top:.2rem">{{ com.contenido }}</div>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div style="text-align:center;font-family:var(--mono);font-size:.58rem;color:var(--muted);padding:1.5rem 0">
+          Sin comunicaciones registradas
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+function cambiarEstado(sel) {
+  fetch('/presupuesto/' + sel.dataset.id + '/estado', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({estado: sel.value})
+  });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}· Proveedores{% endblock %}
+{% block topbar %}
+<div><div class="topbar-title">PROVEEDORES</div><div class="topbar-sub">Red de subcontratación</div></div>
+<div class="topbar-right">
+  <button class="btn btn-primary" onclick="document.getElementById('modal-nuevo').style.display='flex'">+ Nuevo proveedor</button>
+</div>
+{% endblock %}
+{% block content %}
+<div class="kpi-row">
+  <div class="kpi orange"><div class="kpi-label">Total proveedores</div><div class="kpi-value">{{ stats.total }}</div></div>
+  <div class="kpi green"><div class="kpi-label">Activos</div><div class="kpi-value">{{ stats.activos }}</div></div>
+  <div class="kpi blue"><div class="kpi-label">Pedidos en curso</div><div class="kpi-value">{{ stats.pedidos_activos }}</div></div>
+  <div class="kpi yellow"><div class="kpi-label">Gasto este mes</div><div class="kpi-value">{{ "%.0f"|format(stats.gasto_mes) }}€</div></div>
+</div>
+
+<div class="panel">
+  <div class="panel-header"><span class="panel-title">Red de proveedores</span></div>
+  <div class="search-bar" style="margin:.8rem;width:auto">
+    <span style="color:var(--muted)">⌕</span>
+    <input type="text" id="buscador" placeholder="Buscar proveedor o especialidad..." oninput="filtrar()"/>
+  </div>
+  <table class="table" id="tabla-prov">
+    <thead><tr><th>Proveedor</th><th>Especialidad</th><th>Contacto</th><th>Pedidos</th><th>Gasto total</th><th>Valoración</th><th>Estado</th><th></th></tr></thead>
+    <tbody>
+      {% for p in proveedores %}
+      <tr data-search="{{ (p.nombre+' '+(p.empresa or '')+' '+(p.especialidad or ''))|lower }}">
+        <td>
+          <a href="/proveedor/{{ p.id }}" style="color:#fff;font-weight:400">{{ p.nombre }}</a>
+          {% if p.empresa %}<div style="font-size:.72rem;color:var(--muted2);margin-top:.1rem">{{ p.empresa }}</div>{% endif %}
+        </td>
+        <td style="font-size:.78rem;color:var(--muted2)">{{ p.especialidad or '—' }}</td>
+        <td>
+          {% if p.email %}<div style="font-size:.75rem">{{ p.email }}</div>{% endif %}
+          {% if p.telefono %}<div style="font-family:var(--mono);font-size:.62rem;color:var(--muted2)">{{ p.telefono }}</div>{% endif %}
+        </td>
+        <td style="font-family:var(--mono);font-size:.75rem;color:var(--muted2)">{{ p.num_pedidos }}</td>
+        <td style="font-family:var(--mono);font-size:.78rem;color:var(--accent)">
+          {% if p.gasto_total > 0 %}{{ "%.0f"|format(p.gasto_total) }}€{% else %}—{% endif %}
+        </td>
+        <td>
+          <span style="color:var(--accent2);font-size:.85rem">
+            {% for i in range(p.valoracion|int) %}★{% endfor %}{% if p.valoracion % 1 >= 0.5 %}½{% endif %}
+          </span>
+          <span style="font-family:var(--mono);font-size:.6rem;color:var(--muted2)"> {{ p.valoracion }}</span>
+        </td>
+        <td>
+          {% if p.estado == 'activo' %}<span class="badge badge-green">Activo</span>
+          {% elif p.estado == 'ocasional' %}<span class="badge badge-yellow">Ocasional</span>
+          {% else %}<span class="badge badge-muted">Inactivo</span>{% endif %}
+        </td>
+        <td><a href="/proveedor/{{ p.id }}" class="btn btn-sm">Ver →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- MODAL NUEVO PROVEEDOR -->
+<div id="modal-nuevo" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--border);padding:2rem;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;margin-bottom:1.5rem">
+      <span style="font-family:var(--display);font-size:1.4rem;color:#fff">NUEVO PROVEEDOR</span>
+      <button onclick="document.getElementById('modal-nuevo').style.display='none'" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2rem">✕</button>
+    </div>
+    <form method="POST" action="/proveedor/nuevo">
+      <div class="form-grid cols-2">
+        <div class="form-field"><label class="form-label">Nombre / Contacto *</label><input name="nombre" class="form-input" required/></div>
+        <div class="form-field"><label class="form-label">Empresa</label><input name="empresa" class="form-input"/></div>
+      </div>
+      <div class="form-grid cols-2">
+        <div class="form-field"><label class="form-label">Email</label><input name="email" type="email" class="form-input"/></div>
+        <div class="form-field"><label class="form-label">Teléfono</label><input name="telefono" class="form-input"/></div>
+      </div>
+      <div class="form-grid cols-2">
+        <div class="form-field"><label class="form-label">Especialidad</label>
+          <select name="especialidad" class="form-select">
+            <option>Mecanizado CNC</option><option>Impresión 3D</option>
+            <option>Corte láser y chapa</option><option>Soldadura TIG/MIG</option>
+            <option>Visualización 3D</option><option>Simulación FEM</option><option>Otro</option>
+          </select>
+        </div>
+        <div class="form-field"><label class="form-label">Valoración (1-5)</label>
+          <input name="valoracion" type="number" min="1" max="5" step="0.1" class="form-input" value="5.0"/>
+        </div>
+      </div>
+      <div class="form-grid cols-2">
+        <div class="form-field"><label class="form-label">Estado</label>
+          <select name="estado" class="form-select">
+            <option value="activo">Activo</option><option value="ocasional">Ocasional</option><option value="inactivo">Inactivo</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-grid"><div class="form-field"><label class="form-label">Notas internas</label>
+        <textarea name="notas" class="form-textarea" placeholder="Condiciones, plazos habituales, calidad..."></textarea>
+      </div></div>
+      <div style="display:flex;gap:.6rem;margin-top:.5rem">
+        <button type="submit" class="btn btn-primary">Crear proveedor</button>
+        <button type="button" onclick="document.getElementById('modal-nuevo').style.display='none'" class="btn">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function filtrar() {
+  const q = document.getElementById('buscador').value.toLowerCase();
+  document.querySelectorAll('#tabla-prov tbody tr').forEach(r => {
+    r.style.display = r.dataset.search.includes(q) ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}

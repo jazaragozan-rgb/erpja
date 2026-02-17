@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}· Dashboard{% endblock %}
+{% block topbar %}
+<div><div class="topbar-title">DASHBOARD</div><div class="topbar-sub">Resumen general · {{ now }}</div></div>
+<div class="topbar-right"><a href="/proyecto/nuevo" class="btn btn-primary">+ Nuevo proyecto</a></div>
+{% endblock %}
+{% block content %}
+<div class="kpi-row">
+  <div class="kpi orange"><div class="kpi-label">Facturado este mes</div><div class="kpi-value">{{ "%.0f"|format(stats.facturado_mes) }}€</div></div>
+  <div class="kpi green"><div class="kpi-label">Proyectos activos</div><div class="kpi-value">{{ stats.proyectos_activos }}</div></div>
+  <div class="kpi blue"><div class="kpi-label">Facturas pendientes</div><div class="kpi-value">{{ stats.facturas_pendientes }}</div></div>
+  <div class="kpi yellow"><div class="kpi-label">Cobros pendientes</div><div class="kpi-value">{{ "%.0f"|format(stats.cobros_pendientes) }}€</div></div>
+</div>
+<div class="grid-60-40">
+  <div class="panel">
+    <div class="panel-header"><span class="panel-title">Proyectos activos</span><a href="/proyectos" class="panel-action">Ver todos →</a></div>
+    <div style="padding:0">
+      {% for p in proyectos %}
+      <a href="/proyecto/{{ p.id }}" style="text-decoration:none;display:block">
+        <div style="padding:.9rem 1.1rem;border-bottom:1px solid var(--border);border-left:3px solid {% if p.estado=='en_diseno' %}var(--accent){% elif p.estado=='en_fabricacion' %}var(--green){% elif p.estado=='revision_cliente' %}var(--blue){% else %}var(--yellow){% endif %};transition:background .15s" onmouseover="this.style.background='rgba(255,255,255,.02)'" onmouseout="this.style.background=''">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="font-family:var(--mono);font-size:.52rem;color:var(--muted)">{{ p.referencia }} · {{ p.cliente_empresa or p.cliente_nombre }}</div>
+              <div style="font-size:.85rem;color:#fff;margin-top:.15rem">{{ p.nombre }}</div>
+            </div>
+            <span class="badge {% if p.estado=='en_diseno' %}badge-orange{% elif p.estado=='en_fabricacion' %}badge-green{% elif p.estado=='revision_cliente' %}badge-blue{% else %}badge-yellow{% endif %}">
+              {{ p.estado|replace('_',' ') }}
+            </span>
+          </div>
+          <div style="background:var(--border);height:3px;margin-top:.6rem"><div style="height:3px;background:{% if p.estado=='en_diseno' %}var(--accent){% elif p.estado=='en_fabricacion' %}var(--green){% else %}var(--blue){% endif %};width:{{ p.progreso }}%"></div></div>
+          <div style="display:flex;gap:1.2rem;margin-top:.4rem">
+            <span style="font-family:var(--mono);font-size:.52rem;color:var(--muted)">Entrega: <span style="color:var(--muted2)">{{ p.fecha_entrega }}</span></span>
+            <span style="font-family:var(--mono);font-size:.52rem;color:var(--muted)">Progreso: <span style="color:var(--accent)">{{ p.progreso }}%</span></span>
+          </div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:1.2rem">
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Actividad reciente</span></div>
+      <div class="panel-body" style="padding:.6rem 1rem">
+        <div class="timeline">
+          {% for a in actividad %}
+          <div class="tl-item">
+            <div class="tl-dot {% if a.tipo=='factura' %}orange{% else %}green{% endif %}"></div>
+            <div class="tl-date">{{ a.fecha }}</div>
+            <div class="tl-text"><strong>{{ a.ref }}</strong> · {{ a.texto[:50] }}{% if a.texto|length > 50 %}...{% endif %}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Accesos rápidos</span></div>
+      <div class="panel-body" style="display:flex;flex-direction:column;gap:.5rem">
+        <a href="/cliente/nuevo" class="btn" style="text-align:center">+ Nuevo cliente</a>
+        <a href="/facturacion" class="btn" style="text-align:center">Ver facturas pendientes</a>
+        <a href="/proyectos" class="btn" style="text-align:center">Ver Gantt de proyectos</a>
+        <a href="/proveedores" class="btn" style="text-align:center">Gestionar proveedores</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

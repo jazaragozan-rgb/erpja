@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}· Nuevo presupuesto{% endblock %}
+
+{% block topbar %}
+<div>
+  <div class="topbar-title">NUEVO PRESUPUESTO</div>
+  <div class="topbar-sub">{{ cliente.nombre }} · {{ cliente.empresa or '' }}</div>
+</div>
+<div class="topbar-right">
+  <a href="/cliente/{{ cliente.id }}" class="btn">← Cancelar</a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:680px">
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Datos del presupuesto</span>
+      <span style="font-family:var(--mono);font-size:.6rem;color:var(--accent)">{{ num }}</span>
+    </div>
+    <div class="panel-body">
+      <form method="POST">
+        <div class="form-grid">
+          <div class="form-field">
+            <label class="form-label">Descripción del trabajo *</label>
+            <input name="descripcion" class="form-input" placeholder="Ej: Diseño soporte CNC con planos ISO" required/>
+          </div>
+        </div>
+        <div class="form-grid cols-2">
+          <div class="form-field">
+            <label class="form-label">Servicio</label>
+            <select name="servicio" class="form-select">
+              <option>Diseño mecánico</option>
+              <option>Fabricación integral</option>
+              <option>Renderizado 3D</option>
+              <option>Consultoría</option>
+              <option>Apoyo técnico</option>
+              <option>Planos técnicos</option>
+              <option>Otro</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label class="form-label">Importe (€) *</label>
+            <input name="importe" type="number" step="0.01" min="0" class="form-input" placeholder="0.00" required/>
+          </div>
+        </div>
+        <div class="form-grid cols-2">
+          <div class="form-field">
+            <label class="form-label">Fecha de emisión</label>
+            <input name="fecha_emision" type="date" class="form-input" value="{{ today }}"/>
+          </div>
+          <div class="form-field">
+            <label class="form-label">Válido hasta</label>
+            <input name="fecha_validez" type="date" class="form-input" value="{{ validez }}"/>
+          </div>
+        </div>
+        <div class="form-grid cols-2">
+          <div class="form-field">
+            <label class="form-label">Estado inicial</label>
+            <select name="estado" class="form-select">
+              <option value="borrador">Borrador</option>
+              <option value="enviado">Enviado</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="form-field">
+            <label class="form-label">Notas / condiciones</label>
+            <textarea name="notas" class="form-textarea" placeholder="Ej: Incluye 2 revisiones · Entrega en STEP + DWG + PDF · Pago 50% firma / 50% entrega"></textarea>
+          </div>
+        </div>
+
+        <!-- Preview totals -->
+        <div style="background:var(--card);border:1px solid var(--border);padding:.8rem 1rem;margin:.5rem 0 1rem;display:flex;gap:2rem">
+          <div>
+            <div style="font-family:var(--mono);font-size:.5rem;color:var(--muted);text-transform:uppercase;margin-bottom:.2rem">Base</div>
+            <div id="prev-base" style="font-family:var(--mono);font-size:.9rem;color:#fff">0,00 €</div>
+          </div>
+          <div>
+            <div style="font-family:var(--mono);font-size:.5rem;color:var(--muted);text-transform:uppercase;margin-bottom:.2rem">IVA 21%</div>
+            <div id="prev-iva" style="font-family:var(--mono);font-size:.9rem;color:var(--green)">+0,00 €</div>
+          </div>
+          <div>
+            <div style="font-family:var(--mono);font-size:.5rem;color:var(--muted);text-transform:uppercase;margin-bottom:.2rem">IRPF 15%</div>
+            <div id="prev-irpf" style="font-family:var(--mono);font-size:.9rem;color:var(--red)">-0,00 €</div>
+          </div>
+          <div style="margin-left:auto">
+            <div style="font-family:var(--mono);font-size:.5rem;color:var(--muted);text-transform:uppercase;margin-bottom:.2rem">Total cliente paga</div>
+            <div id="prev-total" style="font-family:var(--mono);font-size:1.1rem;color:var(--accent)">0,00 €</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:.6rem">
+          <button type="submit" class="btn btn-primary">Guardar presupuesto</button>
+          <a href="/cliente/{{ cliente.id }}" class="btn">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+document.querySelector('[name="importe"]').addEventListener('input', function() {
+  const base = parseFloat(this.value) || 0;
+  const iva = base * 0.21;
+  const irpf = base * 0.15;
+  const total = base + iva - irpf;
+  const fmt = v => v.toFixed(2).replace('.', ',') + ' €';
+  document.getElementById('prev-base').textContent  = fmt(base);
+  document.getElementById('prev-iva').textContent   = '+' + fmt(iva);
+  document.getElementById('prev-irpf').textContent  = '-' + fmt(irpf);
+  document.getElementById('prev-total').textContent = fmt(total);
+});
+</script>
+{% endblock %}

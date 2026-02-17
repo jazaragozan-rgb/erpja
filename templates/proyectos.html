@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+{% block title %}· Proyectos{% endblock %}
+{% block topbar %}
+<div><div class="topbar-title">PROYECTOS</div><div class="topbar-sub">Seguimiento y planificación</div></div>
+<div class="topbar-right">
+  <button class="btn" onclick="toggleView()">⊞ Cambiar vista</button>
+  <button class="btn btn-primary" onclick="document.getElementById('modal-nuevo').style.display='flex'">+ Nuevo proyecto</button>
+</div>
+{% endblock %}
+{% block content %}
+<div class="kpi-row">
+  <div class="kpi orange"><div class="kpi-label">Activos</div><div class="kpi-value">{{ stats.activos }}</div></div>
+  <div class="kpi blue"><div class="kpi-label">En diseño</div><div class="kpi-value">{{ stats.en_diseno }}</div></div>
+  <div class="kpi green"><div class="kpi-label">En fabricación</div><div class="kpi-value">{{ stats.en_fabricacion }}</div></div>
+  <div class="kpi yellow"><div class="kpi-label">Entregados (mes)</div><div class="kpi-value">{{ stats.entregados_mes }}</div></div>
+</div>
+
+<!-- GANTT VIEW -->
+<div id="view-gantt" class="panel" style="margin-bottom:1.2rem">
+  <div class="panel-header"><span class="panel-title">Diagrama de Gantt</span><span style="font-family:var(--mono);font-size:.52rem;color:var(--muted)">Arrastre para navegar</span></div>
+  <div style="overflow-x:auto;padding:1rem 1.2rem">
+    <canvas id="gantt-canvas" style="display:block"></canvas>
+  </div>
+</div>
+
+<!-- LIST VIEW -->
+<div id="view-list" style="display:none">
+  <div class="panel">
+    <div class="panel-header"><span class="panel-title">Todos los proyectos</span></div>
+    <table class="table">
+      <thead><tr><th>Referencia</th><th>Proyecto</th><th>Cliente</th><th>Estado</th><th>Progreso</th><th>Entrega</th><th>Importe</th><th></th></tr></thead>
+      <tbody>
+        {% for p in proyectos %}
+        <tr>
+          <td><span style="font-family:var(--mono);font-size:.62rem;color:var(--accent)">{{ p.referencia }}</span></td>
+          <td><a href="/proyecto/{{ p.id }}">{{ p.nombre }}</a></td>
+          <td style="color:var(--muted2);font-size:.78rem">{{ p.cliente_empresa or p.cliente_nombre }}</td>
+          <td><span class="badge {% if p.estado=='en_diseno' %}badge-orange{% elif p.estado=='en_fabricacion' %}badge-green{% elif p.estado=='revision_cliente' %}badge-blue{% elif p.estado=='entregado' %}badge-muted{% else %}badge-yellow{% endif %}">{{ p.estado|replace('_',' ') }}</span></td>
+          <td>
+            <div style="display:flex;align-items:center;gap:.5rem">
+              <div style="background:var(--border);height:3px;width:60px"><div style="height:3px;background:var(--accent);width:{{ p.progreso }}%"></div></div>
+              <span style="font-family:var(--mono);font-size:.6rem;color:var(--muted2)">{{ p.progreso }}%</span>
+            </div>
+          </td>
+          <td style="font-family:var(--mono);font-size:.72rem">{{ p.fecha_entrega or '—' }}</td>
+          <td style="font-family:var(--mono);font-size:.75rem;color:var(--accent)">{{ "%.0f"|format(p.importe) }}€</td>
+          <td><a href="/proyecto/{{ p.id }}" class="btn btn-sm">Ver →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- MODAL NUEVO PROYECTO -->
+<div id="modal-nuevo" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--border);padding:2rem;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
+      <span style="font-family:var(--display);font-size:1.4rem;color:#fff">NUEVO PROYECTO</span>
+      <button onclick="document.getElementById('modal-nuevo').style.display='none'" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2rem">✕</button>
+    </div>
+    <form method="POST" action="/proyecto/nuevo">
+      <div class="form-grid cols-2">
+        <div class="form-field"><label class="form-label">Cliente *</label>
+          <select name="cliente_id" class="form-select" required>
+            <option value="">Seleccionar...</option>
+            {% for cl in clientes %}<option value="{{ cl.id }}">{{ cl.nombre }} — {{ cl.empresa or '' }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-field"><label class="form-label">Servicio</label>
+          <select name="servicio" class="form-select">
+            <option>Diseño mecánico</option><option>Fabricación integral</option>
+            <option>Renderizado 3D</option><option>Consultoría</option>
+            <option>Apoyo técnico</option><option>Planos técnicos</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-grid"><div class="form-field"><label class="form-label">Nombre del proyecto *</label>
+        <input name="nombre" class="form-input" placeholder="Ej: Soporte CNC — Empresa S.L." required/>
+      </div></div>
+      <div class="form-grid cols-2">
+        <div class="form-field"><label class="form-label">Fecha inicio</label><input name="fecha_inicio" type="date" class="form-input" value="{{ today }}"/></div>
+        <div class="form-field"><label class="form-label">Fecha entrega</label><input name="fecha_entrega" type="date" class="form-input"/></div>
+      </div>
+      <div class="form-grid cols-2">
+        <div class="form-field"><label class="form-label">Importe (€)</label><input name="importe" type="number" step="0.01" class="form-input" placeholder="0"/></div>
+        <div class="form-field"><label class="form-label">Horas estimadas</label><input name="horas_estimadas" type="number" step="0.5" class="form-input" placeholder="0"/></div>
+      </div>
+      <div class="form-grid cols-2">
+        <div class="form-field"><label class="form-label">Estado inicial</label>
+          <select name="estado" class="form-select">
+            <option value="en_diseno">En diseño</option><option value="en_fabricacion">En fabricación</option>
+            <option value="revision_cliente">Revisión cliente</option><option value="activo">Activo</option>
+          </select>
+        </div>
+        <div class="form-field"><label class="form-label">Progreso (%)</label><input name="progreso" type="number" min="0" max="100" class="form-input" value="0"/></div>
+      </div>
+      <div class="form-grid"><div class="form-field"><label class="form-label">Notas</label><textarea name="notas" class="form-textarea" style="min-height:60px"></textarea></div></div>
+      <div style="display:flex;gap:.6rem;margin-top:.5rem">
+        <button type="submit" class="btn btn-primary">Crear proyecto</button>
+        <button type="button" onclick="document.getElementById('modal-nuevo').style.display='none'" class="btn">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const ESTADOS = {
+  'en_diseno': {label:'En diseño', color:'#e86c2f'},
+  'en_fabricacion': {label:'En fabricación', color:'#2ecc71'},
+  'revision_cliente': {label:'Revisión cliente', color:'#3498db'},
+  'activo': {label:'Activo', color:'#f39c12'},
+  'entregado': {label:'Entregado', color:'#555'},
+  'cancelado': {label:'Cancelado', color:'#e74c3c'},
+};
+
+let viewGantt = true;
+function toggleView() {
+  viewGantt = !viewGantt;
+  document.getElementById('view-gantt').style.display = viewGantt ? '' : 'none';
+  document.getElementById('view-list').style.display  = viewGantt ? 'none' : '';
+}
+
+async function drawGantt() {
+  const resp = await fetch('/api/gantt');
+  const data = await resp.json();
+  if (!data.length) return;
+
+  const ROW_H = 36, HEAD_H = 48, LEFT_W = 180, DAY_W = 22;
+  const dates = data.flatMap(p => [new Date(p.fecha_inicio), new Date(p.fecha_entrega)]);
+  const minD = new Date(Math.min(...dates) - 7*86400000);
+  const maxD = new Date(Math.max(...dates) + 7*86400000);
+  const totalDays = Math.ceil((maxD - minD) / 86400000);
+
+  const canvas = document.getElementById('gantt-canvas');
+  canvas.width  = LEFT_W + totalDays * DAY_W;
+  canvas.height = HEAD_H + data.length * ROW_H + 20;
+  const ctx = canvas.getContext('2d');
+
+  // BG
+  ctx.fillStyle = '#171717'; ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // Grid columns (weeks)
+  for (let d = 0; d <= totalDays; d++) {
+    const x = LEFT_W + d * DAY_W;
+    const dt = new Date(minD.getTime() + d * 86400000);
+    ctx.strokeStyle = dt.getDay()===1 ? '#2e2e2e' : '#1e1e1e';
+    ctx.lineWidth = dt.getDay()===1 ? 1 : 0.5;
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke();
+  }
+
+  // Today line
+  const today = new Date(); today.setHours(0,0,0,0);
+  const todayX = LEFT_W + Math.ceil((today - minD)/86400000) * DAY_W;
+  ctx.strokeStyle = '#e86c2f'; ctx.lineWidth = 1.5;
+  ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(todayX,0); ctx.lineTo(todayX,canvas.height); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Header months
+  ctx.fillStyle = '#111'; ctx.fillRect(0,0,canvas.width,HEAD_H);
+  ctx.fillStyle = '#252525'; ctx.fillRect(0,0,LEFT_W,HEAD_H);
+  ctx.strokeStyle = '#252525'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0,HEAD_H); ctx.lineTo(canvas.width,HEAD_H); ctx.stroke();
+
+  const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  let prevMonth = -1;
+  for (let d = 0; d <= totalDays; d++) {
+    const dt = new Date(minD.getTime() + d * 86400000);
+    if (dt.getMonth() !== prevMonth) {
+      prevMonth = dt.getMonth();
+      ctx.fillStyle = '#666'; ctx.font = '11px Share Tech Mono, monospace';
+      ctx.fillText(months[dt.getMonth()]+' '+dt.getFullYear(), LEFT_W + d*DAY_W + 4, 20);
+    }
+    if (dt.getDate() % 7 === 0) {
+      ctx.fillStyle = '#444'; ctx.font = '9px Share Tech Mono, monospace';
+      ctx.fillText(dt.getDate(), LEFT_W + d*DAY_W + 2, 38);
+    }
+  }
+
+  ctx.fillStyle = '#888'; ctx.font = 'bold 9px Share Tech Mono, monospace';
+  ctx.fillText('PROYECTO', 8, 20);
+  ctx.fillText('CLIENTE', 8, 36);
+
+  // Rows
+  data.forEach((p, i) => {
+    const y = HEAD_H + i * ROW_H;
+    ctx.fillStyle = i%2===0 ? '#111' : '#141414';
+    ctx.fillRect(0, y, canvas.width, ROW_H);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(0, y, LEFT_W, ROW_H);
+
+    // Row separator
+    ctx.strokeStyle = '#1e1e1e'; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(0,y+ROW_H); ctx.lineTo(canvas.width,y+ROW_H); ctx.stroke();
+
+    // Labels
+    ctx.fillStyle = '#ccc'; ctx.font = '10px DM Sans, sans-serif';
+    const label = p.nombre.length > 22 ? p.nombre.substring(0,22)+'…' : p.nombre;
+    ctx.fillText(label, 8, y + 15);
+    ctx.fillStyle = '#555'; ctx.font = '9px Share Tech Mono, monospace';
+    ctx.fillText(p.referencia, 8, y + 28);
+
+    // Bar
+    const startX = LEFT_W + Math.ceil((new Date(p.fecha_inicio) - minD)/86400000) * DAY_W;
+    const endX   = LEFT_W + Math.ceil((new Date(p.fecha_entrega) - minD)/86400000) * DAY_W;
+    const barW   = Math.max(endX - startX, DAY_W);
+    const estado = ESTADOS[p.estado] || {color:'#555'};
+
+    // Bar shadow
+    ctx.fillStyle = 'rgba(0,0,0,.3)';
+    ctx.fillRect(startX+2, y+10, barW, 16);
+
+    // Bar bg
+    ctx.fillStyle = estado.color+'22';
+    ctx.fillRect(startX, y+8, barW, 18);
+
+    // Progress fill
+    const progW = barW * (p.progreso/100);
+    ctx.fillStyle = estado.color+'99';
+    ctx.fillRect(startX, y+8, progW, 18);
+
+    // Bar border
+    ctx.strokeStyle = estado.color;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(startX, y+8, barW, 18);
+
+    // % label inside bar
+    if (barW > 30) {
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 9px Share Tech Mono, monospace';
+      ctx.fillText(p.progreso+'%', startX+4, y+21);
+    }
+  });
+
+  // Left panel border
+  ctx.strokeStyle = '#2a2a2a'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(LEFT_W,0); ctx.lineTo(LEFT_W,canvas.height); ctx.stroke();
+}
+
+drawGantt();
+</script>
+{% endblock %}
