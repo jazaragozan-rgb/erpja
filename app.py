@@ -75,14 +75,15 @@ def init_db():
 
     c.execute('''CREATE TABLE IF NOT EXISTS facturas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        cliente_id INTEGER, proyecto_id INTEGER,
+        cliente_id INTEGER, proyecto_id INTEGER, albaran_id INTEGER,
         numero TEXT UNIQUE, concepto TEXT,
         base REAL, iva REAL DEFAULT 21, irpf REAL DEFAULT 15,
         estado TEXT DEFAULT 'pendiente',
         fecha_emision TEXT, fecha_vencimiento TEXT, fecha_cobro TEXT,
         notas TEXT,
         FOREIGN KEY (cliente_id) REFERENCES clientes(id),
-        FOREIGN KEY (proyecto_id) REFERENCES proyectos(id))''')
+        FOREIGN KEY (proyecto_id) REFERENCES proyectos(id),
+        FOREIGN KEY (albaran_id) REFERENCES albaranes(id))''')
 
     c.execute('''CREATE TABLE IF NOT EXISTS proveedores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -99,6 +100,18 @@ def init_db():
         fecha_pedido TEXT DEFAULT CURRENT_DATE, fecha_entrega_esperada TEXT,
         notas TEXT,
         FOREIGN KEY (proveedor_id) REFERENCES proveedores(id),
+        FOREIGN KEY (proyecto_id) REFERENCES proyectos(id))''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS albaranes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pedido_id INTEGER NOT NULL,
+        proyecto_id INTEGER NOT NULL,
+        numero TEXT UNIQUE,
+        fecha_recepcion TEXT DEFAULT CURRENT_DATE,
+        estado TEXT DEFAULT 'no_facturado',
+        conformidad TEXT,
+        notas TEXT,
+        FOREIGN KEY (pedido_id) REFERENCES pedidos_proveedor(id),
         FOREIGN KEY (proyecto_id) REFERENCES proyectos(id))''')
 
     # Demo data
@@ -185,8 +198,8 @@ def dashboard():
     stats = {
         'clientes_activos': conn.execute("SELECT COUNT(*) FROM clientes WHERE estado='activo'").fetchone()[0],
         'proyectos_activos': conn.execute("SELECT COUNT(*) FROM proyectos WHERE estado NOT IN ('entregado','cancelado')").fetchone()[0],
+        'albaranes_pendientes': conn.execute("SELECT COUNT(*) FROM albaranes WHERE estado='no_facturado'").fetchone()[0],
         'facturas_pendientes': conn.execute("SELECT COUNT(*) FROM facturas WHERE estado='pendiente'").fetchone()[0],
-        'cobros_pendientes': conn.execute("SELECT COALESCE(SUM(base),0) FROM facturas WHERE estado='pendiente'").fetchone()[0],
         'facturado_mes': conn.execute("SELECT COALESCE(SUM(base),0) FROM facturas WHERE strftime('%Y-%m',fecha_emision)=strftime('%Y-%m','now')").fetchone()[0],
     }
     proyectos = conn.execute('''SELECT p.*, c.nombre as cliente_nombre, c.empresa as cliente_empresa
@@ -196,6 +209,8 @@ def dashboard():
         SELECT 'factura' as tipo, numero as ref, fecha_emision as fecha, concepto as texto FROM facturas
         UNION ALL
         SELECT 'proyecto', referencia, fecha_creacion, nombre FROM proyectos
+        UNION ALL
+        SELECT 'albaran', numero, fecha_recepcion, 'Albarán recibido' FROM albaranes
         ORDER BY fecha DESC LIMIT 6''').fetchall()
     conn.close()
     return render_template('dashboard.html', stats=stats, proyectos=proyectos, actividad=actividad)
@@ -284,8 +299,25 @@ def presupuesto_nuevo(cliente_id):
 def presupuesto_estado(id):
     data = request.get_json()
     conn = get_db()
+    
+    # Update presupuesto state
     conn.execute('UPDATE presupuestos SET estado=? WHERE id=?',(data['estado'],id))
-    conn.commit(); conn.close()
+    
+    # If accepted → auto-create project
+    if data['estado'] == 'aceptado':
+        pres = conn.execute('SELECT * FROM presupuestos WHERE id=?',(id,)).fetchone()
+        # Check if project already exists
+        existing = conn.execute('SELECT id FROM proyectos WHERE presupuesto_id=?',(id,)).fetchone()
+        if not existing:
+            ref = next_num('proyectos','referencia','PRY')
+            conn.execute('''INSERT INTO proyectos 
+                (cliente_id, presupuesto_id, referencia, nombre, servicio, estado, importe, fecha_inicio)
+                VALUES (?,?,?,?,?,?,?,date('now'))''',
+                (pres['cliente_id'], id, ref, pres['descripcion'], pres['servicio'], 
+                 'en_diseno', pres['importe']))
+    
+    conn.commit()
+    conn.close()
     return jsonify({'ok':True})
 
 @app.route('/comunicacion/nueva/<int:cliente_id>', methods=['POST'])
@@ -295,6 +327,64 @@ def comunicacion_nueva(cliente_id):
         (cliente_id,request.form['tipo'],request.form['asunto'],request.form['contenido']))
     conn.commit(); conn.close()
     return redirect(url_for('cliente_detalle', id=cliente_id))
+
+# ── PRESUPUESTOS ──────────────────────────────────────────────────────────────
+@app.route('/presupuestos')
+def presupuestos_listado():
+    conn = get_db()
+    presupuestos = conn.execute('''SELECT p.*, 
+        c.nombre as cliente_nombre, c.empresa as cliente_empresa,
+        pry.id as proyecto_id, pry.referencia as proyecto_ref
+        FROM presupuestos p 
+        JOIN clientes c ON c.id = p.cliente_id
+        LEFT JOIN proyectos pry ON pry.presupuesto_id = p.id
+        ORDER BY p.fecha_emision DESC''').fetchall()
+    stats = {
+        'total': conn.execute("SELECT COUNT(*) FROM presupuestos").fetchone()[0],
+        'borradores': conn.execute("SELECT COUNT(*) FROM presupuestos WHERE estado='borrador'").fetchone()[0],
+        'enviados': conn.execute("SELECT COUNT(*) FROM presupuestos WHERE estado='enviado'").fetchone()[0],
+        'aceptados': conn.execute("SELECT COUNT(*) FROM presupuestos WHERE estado='aceptado'").fetchone()[0],
+        'rechazados': conn.execute("SELECT COUNT(*) FROM presupuestos WHERE estado='rechazado'").fetchone()[0],
+        'importe_enviados': conn.execute("SELECT COALESCE(SUM(importe),0) FROM presupuestos WHERE estado='enviado'").fetchone()[0],
+    }
+    clientes = conn.execute("SELECT id,nombre,empresa FROM clientes ORDER BY nombre").fetchall()
+    conn.close()
+    return render_template('presupuestos.html', presupuestos=presupuestos, stats=stats, clientes=clientes)
+
+@app.route('/presupuesto/<int:id>')
+def presupuesto_detalle(id):
+    conn = get_db()
+    presupuesto = conn.execute('''SELECT p.*, 
+        c.nombre as cliente_nombre, c.empresa as cliente_empresa, c.email as cliente_email
+        FROM presupuestos p JOIN clientes c ON c.id = p.cliente_id
+        WHERE p.id=?''',(id,)).fetchone()
+    proyecto = conn.execute('SELECT * FROM proyectos WHERE presupuesto_id=?',(id,)).fetchone()
+    conn.close()
+    return render_template('presupuesto_detalle.html', presupuesto=presupuesto, proyecto=proyecto)
+
+@app.route('/presupuesto/<int:id>/editar', methods=['POST'])
+def presupuesto_editar(id):
+    conn = get_db()
+    conn.execute('''UPDATE presupuestos SET descripcion=?, servicio=?, importe=?, 
+        fecha_emision=?, fecha_validez=?, notas=? WHERE id=?''',
+        (request.form['descripcion'], request.form['servicio'], float(request.form['importe']),
+         request.form['fecha_emision'], request.form['fecha_validez'], request.form.get('notas',''), id))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('presupuesto_detalle', id=id))
+
+@app.route('/presupuesto/<int:id>/eliminar', methods=['POST'])
+def presupuesto_eliminar(id):
+    conn = get_db()
+    # Check if has proyecto linked
+    proyecto = conn.execute('SELECT id FROM proyectos WHERE presupuesto_id=?',(id,)).fetchone()
+    if proyecto:
+        conn.close()
+        return jsonify({'error': 'No se puede eliminar: tiene un proyecto asociado'}), 400
+    conn.execute('DELETE FROM presupuestos WHERE id=?',(id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('presupuestos_listado'))
 
 # ── PROYECTOS ─────────────────────────────────────────────────────────────────
 @app.route('/proyectos')
@@ -611,15 +701,96 @@ def pedido_nuevo(proveedor_id):
 def pedido_estado(id):
     data = request.get_json()
     conn = get_db()
-    prov_id = conn.execute('SELECT proveedor_id FROM pedidos_proveedor WHERE id=?',(id,)).fetchone()[0]
+    
+    pedido = conn.execute('SELECT * FROM pedidos_proveedor WHERE id=?',(id,)).fetchone()
     conn.execute('UPDATE pedidos_proveedor SET estado=? WHERE id=?',(data['estado'],id))
-    conn.commit(); conn.close()
+    
+    # If recibido → auto-create albaran
+    if data['estado'] == 'recibido':
+        # Check if albaran already exists
+        existing = conn.execute('SELECT id FROM albaranes WHERE pedido_id=?',(id,)).fetchone()
+        if not existing:
+            num = next_num('albaranes','numero','ALB')
+            conn.execute('''INSERT INTO albaranes 
+                (pedido_id, proyecto_id, numero, fecha_recepcion, estado, conformidad)
+                VALUES (?,?,?,date('now'),'no_facturado','Conforme')''',
+                (id, pedido['proyecto_id'], num))
+    
+    conn.commit()
+    conn.close()
     return jsonify({'ok':True})
 
-if __name__ == '__main__':
-    init_db()
-    print("\n✓ JA·ERP iniciado → http://localhost:5000\n")
-    app.run(debug=True, port=5000)
+# ── ALBARANES ─────────────────────────────────────────────────────────────────
+@app.route('/albaranes')
+def albaranes():
+    conn = get_db()
+    albaranes = conn.execute('''SELECT a.*, 
+        p.referencia as proyecto_ref, p.nombre as proyecto_nombre,
+        c.nombre as cliente_nombre,
+        ped.numero as pedido_numero, ped.concepto as pedido_concepto,
+        prov.nombre as proveedor_nombre
+        FROM albaranes a
+        JOIN proyectos p ON p.id = a.proyecto_id
+        JOIN clientes c ON c.id = p.cliente_id
+        JOIN pedidos_proveedor ped ON ped.id = a.pedido_id
+        JOIN proveedores prov ON prov.id = ped.proveedor_id
+        ORDER BY a.fecha_recepcion DESC''').fetchall()
+    stats = {
+        'total': conn.execute("SELECT COUNT(*) FROM albaranes").fetchone()[0],
+        'no_facturados': conn.execute("SELECT COUNT(*) FROM albaranes WHERE estado='no_facturado'").fetchone()[0],
+        'facturados': conn.execute("SELECT COUNT(*) FROM albaranes WHERE estado='facturado'").fetchone()[0],
+    }
+    conn.close()
+    return render_template('albaranes.html', albaranes=albaranes, stats=stats)
+
+@app.route('/albaran/<int:id>')
+def albaran_detalle(id):
+    conn = get_db()
+    albaran = conn.execute('''SELECT a.*,
+        p.referencia as proyecto_ref, p.nombre as proyecto_nombre, p.cliente_id, p.importe as proyecto_importe,
+        c.nombre as cliente_nombre, c.empresa as cliente_empresa,
+        ped.numero as pedido_numero, ped.concepto as pedido_concepto, ped.importe as pedido_importe,
+        prov.nombre as proveedor_nombre, prov.empresa as proveedor_empresa
+        FROM albaranes a
+        JOIN proyectos p ON p.id = a.proyecto_id
+        JOIN clientes c ON c.id = p.cliente_id
+        JOIN pedidos_proveedor ped ON ped.id = a.pedido_id
+        JOIN proveedores prov ON prov.id = ped.proveedor_id
+        WHERE a.id=?''',(id,)).fetchone()
+    factura = conn.execute('SELECT * FROM facturas WHERE albaran_id=?',(id,)).fetchone()
+    conn.close()
+    return render_template('albaran_detalle.html', albaran=albaran, factura=factura)
+
+@app.route('/albaran/<int:id>/editar', methods=['POST'])
+def albaran_editar(id):
+    conn = get_db()
+    conn.execute('UPDATE albaranes SET conformidad=?, notas=? WHERE id=?',
+        (request.form['conformidad'], request.form.get('notas',''), id))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('albaran_detalle', id=id))
+
+@app.route('/albaran/<int:id>/facturar', methods=['POST'])
+def albaran_facturar(id):
+    conn = get_db()
+    alb = conn.execute('''SELECT a.*, p.cliente_id, p.importe as proyecto_importe, p.nombre as proyecto_nombre
+        FROM albaranes a JOIN proyectos p ON p.id=a.proyecto_id WHERE a.id=?''',(id,)).fetchone()
+    
+    # Create factura from albaran
+    num_fac = next_num('facturas','numero','FAC')
+    conn.execute('''INSERT INTO facturas 
+        (cliente_id, proyecto_id, albaran_id, numero, concepto, base, iva, irpf, estado, fecha_emision, fecha_vencimiento)
+        VALUES (?,?,?,?,?,?,?,?,?,date('now'),date('now','+30 days'))''',
+        (alb['cliente_id'], alb['proyecto_id'], id, num_fac, 
+         alb['proyecto_nombre'], alb['proyecto_importe'], 21, 15, 'pendiente'))
+    
+    # Mark albaran as facturado
+    conn.execute("UPDATE albaranes SET estado='facturado' WHERE id=?",(id,))
+    conn.commit()
+    fac_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    conn.close()
+    
+    return redirect(url_for('albaran_detalle', id=id))
 
 # ── TEMPLATE GLOBALS ──────────────────────────────────────────────────────────
 @app.context_processor
@@ -629,3 +800,8 @@ def inject_globals():
         'now': datetime.now().strftime('%b %Y'),
         'request': request,
     }
+
+if __name__ == '__main__':
+    init_db()
+    print("\n✓ JA·ERP iniciado → http://localhost:5000\n")
+    app.run(debug=True, host='0.0.0.0', port=5000)
