@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}· {{ albaran.numero }}{% endblock %}
+{% block topbar %}
+<div><div class="topbar-title">{{ albaran.numero }}</div><div class="topbar-sub">Albarán de recepción · {{ albaran.proyecto_ref }}</div></div>
+<div class="topbar-right">
+  <a href="/albaranes" class="btn">← Albaranes</a>
+  <a href="/proyecto/{{ albaran.proyecto_id }}" class="btn">Ver proyecto</a>
+  {% if albaran.estado == 'no_facturado' %}
+  <button class="btn" onclick="document.getElementById('modal-editar').style.display='flex'">Editar conformidad</button>
+  <form method="POST" action="/albaran/{{ albaran.id }}/facturar" style="display:inline">
+    <button type="submit" class="btn btn-primary">✓ Facturar al cliente</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
+{% block content %}
+
+<div class="detail-header">
+  <div>
+    <div style="font-family:var(--mono);font-size:.6rem;color:var(--muted);margin-bottom:.3rem">{{ albaran.numero }} · RECEPCIÓN DE MERCANCÍA</div>
+    <div class="detail-name">{{ albaran.proyecto_nombre }}</div>
+    <div class="detail-company">{{ albaran.proyecto_ref }}</div>
+    <div class="detail-meta">
+      <div class="detail-meta-item">📦 Proveedor: <span>{{ albaran.proveedor_nombre }}</span></div>
+      <div class="detail-meta-item">📄 Pedido: <span>{{ albaran.pedido_numero }}</span></div>
+      <div class="detail-meta-item">📅 Recepción: <span>{{ albaran.fecha_recepcion }}</span></div>
+      <div class="detail-meta-item">👤 Cliente: <span>{{ albaran.cliente_nombre }}</span></div>
+    </div>
+  </div>
+  <div style="text-align:right">
+    {% if albaran.estado == 'facturado' %}
+    <span class="badge badge-green" style="font-size:.65rem;padding:.4rem .9rem">✓ FACTURADO</span>
+    {% else %}
+    <span class="badge badge-yellow" style="font-size:.65rem;padding:.4rem .9rem">⏳ PENDIENTE FACTURAR</span>
+    {% endif %}
+    <div style="margin-top:1rem">
+      {% if albaran.conformidad == 'Conforme' %}
+      <div style="color:var(--green);font-size:1.2rem;margin-bottom:.3rem">✓</div>
+      <div style="font-family:var(--mono);font-size:.6rem;color:var(--green)">CONFORME</div>
+      {% elif albaran.conformidad == 'Incidencia' %}
+      <div style="color:var(--red);font-size:1.2rem;margin-bottom:.3rem">✗</div>
+      <div style="font-family:var(--mono);font-size:.6rem;color:var(--red)">INCIDENCIA</div>
+      {% else %}
+      <div style="font-family:var(--mono);font-size:.6rem;color:var(--muted2)">{{ albaran.conformidad }}</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if albaran.notas %}
+<div class="panel" style="margin-bottom:1.2rem">
+  <div class="panel-body" style="display:flex;gap:.8rem">
+    <span style="color:var(--accent)">📝</span>
+    <span style="font-size:.82rem;color:var(--muted2)">{{ albaran.notas }}</span>
+  </div>
+</div>
+{% endif %}
+
+<div class="grid-60-40">
+  <!-- INFORMACIÓN DEL PEDIDO -->
+  <div class="panel">
+    <div class="panel-header"><span class="panel-title">Detalles del pedido recibido</span></div>
+    <div class="panel-body">
+      <div style="display:flex;flex-direction:column;gap:.8rem">
+        <div>
+          <div style="font-family:var(--mono);font-size:.52rem;color:var(--muted);text-transform:uppercase;margin-bottom:.2rem">Proveedor</div>
+          <div style="font-size:.85rem;color:#fff">{{ albaran.proveedor_nombre }}</div>
+          {% if albaran.proveedor_empresa %}<div style="font-size:.75rem;color:var(--muted2)">{{ albaran.proveedor_empresa }}</div>{% endif %}
+        </div>
+        <div>
+          <div style="font-family:var(--mono);font-size:.52rem;color:var(--muted);text-transform:uppercase;margin-bottom:.2rem">Concepto del pedido</div>
+          <div style="font-size:.82rem;color:var(--text)">{{ albaran.pedido_concepto }}</div>
+        </div>
+        <div style="display:flex;gap:2rem;padding-top:.5rem;border-top:1px solid var(--border)">
+          <div>
+            <div style="font-family:var(--mono);font-size:.52rem;color:var(--muted);text-transform:uppercase;margin-bottom:.2rem">Importe pedido</div>
+            <div style="font-family:var(--mono);font-size:1.1rem;color:var(--accent)">{{ "%.2f"|format(albaran.pedido_importe) }}€</div>
+          </div>
+          <div>
+            <div style="font-family:var(--mono);font-size:.52rem;color:var(--muted);text-transform:uppercase;margin-bottom:.2rem">Importe proyecto</div>
+            <div style="font-family:var(--mono);font-size:1.1rem;color:var(--green)">{{ "%.2f"|format(albaran.proyecto_importe) }}€</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FACTURA GENERADA -->
+  <div style="display:flex;flex-direction:column;gap:1.2rem">
+    {% if factura %}
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Factura generada</span></div>
+      <div class="panel-body">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.8rem">
+          <div>
+            <div style="font-family:var(--mono);font-size:.7rem;color:var(--accent)">{{ factura.numero }}</div>
+            <div style="font-size:.75rem;color:var(--muted2);margin-top:.2rem">{{ factura.concepto }}</div>
+          </div>
+          {% if factura.estado == 'cobrada' %}
+          <span class="badge badge-green">Cobrada</span>
+          {% else %}
+          <span class="badge badge-yellow">Pendiente</span>
+          {% endif %}
+        </div>
+        <div style="background:var(--card);padding:.7rem;display:flex;justify-content:space-between;align-items:center">
+          <div style="font-family:var(--mono);font-size:.52rem;color:var(--muted)">TOTAL</div>
+          <div style="font-family:var(--mono);font-size:1.2rem;color:#fff">
+            {% set total = factura.base + (factura.base * factura.iva / 100) - (factura.base * factura.irpf / 100) %}
+            {{ "%.2f"|format(total) }}€
+          </div>
+        </div>
+        <div style="margin-top:.8rem;display:flex;gap:.5rem">
+          <a href="/factura/{{ factura.id }}/pdf" class="btn btn-sm" style="flex:1;text-align:center">Descargar PDF</a>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Facturar al cliente</span></div>
+      <div class="panel-body">
+        <p style="font-size:.82rem;color:var(--muted2);margin-bottom:1rem">
+          Este albarán aún no se ha facturado al cliente. Al facturar se generará automáticamente una factura por el importe del proyecto.
+        </p>
+        <form method="POST" action="/albaran/{{ albaran.id }}/facturar">
+          <button type="submit" class="btn btn-primary" style="width:100%">✓ Generar factura ahora</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- FLUJO DEL PROYECTO -->
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Flujo del proyecto</span></div>
+      <div class="panel-body" style="padding:.6rem 1rem">
+        <div class="timeline">
+          <div class="tl-item">
+            <div class="tl-dot green"></div>
+            <div style="font-family:var(--mono);font-size:.5rem;color:var(--muted);margin-bottom:.2rem">PASO 1</div>
+            <div class="tl-text"><strong>Presupuesto aceptado</strong> → Proyecto creado</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot green"></div>
+            <div style="font-family:var(--mono);font-size:.5rem;color:var(--muted);margin-bottom:.2rem">PASO 2</div>
+            <div class="tl-text"><strong>Pedido a proveedor</strong> → {{ albaran.pedido_numero }}</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot green"></div>
+            <div style="font-family:var(--mono);font-size:.5rem;color:var(--muted);margin-bottom:.2rem">PASO 3</div>
+            <div class="tl-text"><strong>Albarán recepción</strong> → {{ albaran.numero }}</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot {% if factura %}green{% else %}muted{% endif %}"></div>
+            <div style="font-family:var(--mono);font-size:.5rem;color:var(--muted);margin-bottom:.2rem">PASO 4</div>
+            <div class="tl-text">
+              {% if factura %}<strong>Factura cliente</strong> → {{ factura.numero }}
+              {% else %}<span style="color:var(--muted)">Pendiente facturar</span>{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EDITAR CONFORMIDAD -->
+<div id="modal-editar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--border);padding:2rem;width:440px;max-width:95vw">
+    <div style="display:flex;justify-content:space-between;margin-bottom:1.2rem">
+      <span style="font-family:var(--display);font-size:1.2rem;color:#fff">EDITAR CONFORMIDAD</span>
+      <button onclick="document.getElementById('modal-editar').style.display='none'" style="background:none;border:none;color:var(--muted);cursor:pointer">✕</button>
+    </div>
+    <form method="POST" action="/albaran/{{ albaran.id }}/editar">
+      <div class="form-grid">
+        <div class="form-field">
+          <label class="form-label">Estado de la recepción</label>
+          <select name="conformidad" class="form-select">
+            <option value="Conforme" {% if albaran.conformidad == 'Conforme' %}selected{% endif %}>✓ Conforme</option>
+            <option value="Incidencia" {% if albaran.conformidad == 'Incidencia' %}selected{% endif %}>✗ Incidencia</option>
+            <option value="Parcial" {% if albaran.conformidad == 'Parcial' %}selected{% endif %}>Entrega parcial</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="form-field">
+          <label class="form-label">Notas / Incidencias</label>
+          <textarea name="notas" class="form-textarea" style="min-height:60px">{{ albaran.notas or '' }}</textarea>
+        </div>
+      </div>
+      <div style="display:flex;gap:.6rem;margin-top:.5rem">
+        <button type="submit" class="btn btn-primary">Guardar cambios</button>
+        <button type="button" onclick="document.getElementById('modal-editar').style.display='none'" class="btn">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

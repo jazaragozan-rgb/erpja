@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}· Albaranes{% endblock %}
+{% block topbar %}
+<div><div class="topbar-title">ALBARANES</div><div class="topbar-sub">Recepciones y control de mercancía</div></div>
+<div class="topbar-right">
+  <button class="btn" onclick="location.href='/proyectos'">Ver proyectos</button>
+</div>
+{% endblock %}
+{% block content %}
+<div class="kpi-row">
+  <div class="kpi orange"><div class="kpi-label">Total albaranes</div><div class="kpi-value">{{ stats.total }}</div></div>
+  <div class="kpi yellow"><div class="kpi-label">Pendientes facturar</div><div class="kpi-value">{{ stats.no_facturados }}</div></div>
+  <div class="kpi green"><div class="kpi-label">Facturados</div><div class="kpi-value">{{ stats.facturados }}</div></div>
+  <div class="kpi blue"><div class="kpi-label">Ratio facturación</div><div class="kpi-value">{% if stats.total > 0 %}{{ ((stats.facturados / stats.total * 100)|int) }}%{% else %}—{% endif %}</div></div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <span class="panel-title">Todos los albaranes</span>
+    <div style="display:flex;gap:.5rem">
+      <select onchange="filtrarAlbaranes(this.value)" style="background:var(--card);border:1px solid var(--border);color:var(--muted2);font-family:var(--mono);font-size:.55rem;padding:.3rem .5rem;outline:none">
+        <option value="">Todos</option>
+        <option value="no_facturado">No facturados</option>
+        <option value="facturado">Facturados</option>
+      </select>
+    </div>
+  </div>
+  <table class="table" id="tabla-albaranes">
+    <thead><tr><th>Número</th><th>Proyecto</th><th>Cliente</th><th>Proveedor / Pedido</th><th>F. Recepción</th><th>Conformidad</th><th>Estado</th><th></th></tr></thead>
+    <tbody>
+      {% for a in albaranes %}
+      <tr data-estado="{{ a.estado }}">
+        <td><span style="font-family:var(--mono);font-size:.62rem;color:var(--accent)">{{ a.numero }}</span></td>
+        <td>
+          <div style="font-family:var(--mono);font-size:.62rem;color:var(--muted)">{{ a.proyecto_ref }}</div>
+          <div style="font-size:.8rem;color:var(--muted2);margin-top:.1rem">{{ a.proyecto_nombre[:35] }}{% if a.proyecto_nombre|length > 35 %}...{% endif %}</div>
+        </td>
+        <td style="font-size:.78rem">{{ a.cliente_nombre }}</td>
+        <td>
+          <div style="font-size:.78rem">{{ a.proveedor_nombre }}</div>
+          <div style="font-family:var(--mono);font-size:.58rem;color:var(--muted);margin-top:.1rem">{{ a.pedido_numero }}</div>
+        </td>
+        <td style="font-family:var(--mono);font-size:.7rem;color:var(--muted2)">{{ a.fecha_recepcion }}</td>
+        <td>
+          {% if a.conformidad == 'Conforme' %}<span style="color:var(--green);font-size:.75rem">✓ Conforme</span>
+          {% elif a.conformidad == 'Incidencia' %}<span style="color:var(--red);font-size:.75rem">✗ Incidencia</span>
+          {% else %}<span style="color:var(--muted2);font-size:.75rem">{{ a.conformidad }}</span>{% endif %}
+        </td>
+        <td>
+          {% if a.estado == 'facturado' %}<span class="badge badge-green">Facturado</span>
+          {% else %}<span class="badge badge-yellow">No facturado</span>{% endif %}
+        </td>
+        <td><a href="/albaran/{{ a.id }}" class="btn btn-sm">Ver →</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="empty">No hay albaranes todavía</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="panel" style="max-width:600px">
+  <div class="panel-header"><span class="panel-title">Sobre los albaranes</span></div>
+  <div class="panel-body" style="font-size:.82rem;color:var(--muted2);line-height:1.5">
+    <p style="margin-bottom:.8rem">
+      Los <strong style="color:var(--text)">albaranes</strong> se crean automáticamente cuando marcas un pedido a proveedor como <strong style="color:var(--green)">"Recibido"</strong>.
+    </p>
+    <p style="margin-bottom:.8rem">
+      Desde cada albarán puedes:
+    </p>
+    <ul style="margin-left:1.2rem;display:flex;flex-direction:column;gap:.4rem">
+      <li>✓ Registrar si la mercancía llegó conforme o con incidencias</li>
+      <li>✓ Generar la <strong style="color:var(--accent)">factura al cliente</strong> en un clic</li>
+      <li>✓ Ver el estado de facturación del proyecto</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+function filtrarAlbaranes(estado) {
+  document.querySelectorAll('#tabla-albaranes tbody tr[data-estado]').forEach(r => {
+    r.style.display = (!estado || r.dataset.estado === estado) ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}
