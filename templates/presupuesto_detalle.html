@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block title %}· {{ presupuesto.numero }}{% endblock %}
+{% block topbar %}
+<div><div class="topbar-title">{{ presupuesto.numero }}</div><div class="topbar-sub">Presupuesto · {{ presupuesto.cliente_nombre }}</div></div>
+<div class="topbar-right">
+  <a href="/presupuestos" class="btn">← Presupuestos</a>
+  <a href="/cliente/{{ presupuesto.cliente_id }}" class="btn">Ver cliente</a>
+  {% if not proyecto %}
+  <button class="btn" onclick="document.getElementById('modal-editar').style.display='flex'">Editar</button>
+  {% endif %}
+  {% if proyecto %}
+  <a href="/proyecto/{{ proyecto.id }}" class="btn btn-primary">Ver proyecto →</a>
+  {% endif %}
+</div>
+{% endblock %}
+{% block content %}
+
+<div class="detail-header">
+  <div>
+    <div style="font-family:var(--mono);font-size:.6rem;color:var(--muted);margin-bottom:.3rem">{{ presupuesto.numero }} · {{ presupuesto.servicio|upper }}</div>
+    <div class="detail-name">{{ presupuesto.descripcion }}</div>
+    <div class="detail-company">{{ presupuesto.cliente_nombre }} · {{ presupuesto.cliente_empresa or '' }}</div>
+    <div class="detail-meta">
+      <div class="detail-meta-item">📅 Emisión: <span>{{ presupuesto.fecha_emision }}</span></div>
+      <div class="detail-meta-item">⏰ Validez: <span>{{ presupuesto.fecha_validez }}</span></div>
+      <div class="detail-meta-item">💰 Importe: <span>{{ "%.2f"|format(presupuesto.importe) }}€</span></div>
+      {% if presupuesto.cliente_email %}<div class="detail-meta-item">✉ <span>{{ presupuesto.cliente_email }}</span></div>{% endif %}
+    </div>
+  </div>
+  <div style="text-align:right">
+    <div style="margin-bottom:1rem">
+      {% if presupuesto.estado == 'borrador' %}<span class="badge badge-muted" style="font-size:.65rem;padding:.4rem .9rem">📝 BORRADOR</span>
+      {% elif presupuesto.estado == 'enviado' %}<span class="badge badge-yellow" style="font-size:.65rem;padding:.4rem .9rem">📤 ENVIADO</span>
+      {% elif presupuesto.estado == 'aceptado' %}<span class="badge badge-green" style="font-size:.65rem;padding:.4rem .9rem">✓ ACEPTADO</span>
+      {% elif presupuesto.estado == 'rechazado' %}<span class="badge badge-red" style="font-size:.65rem;padding:.4rem .9rem">✗ RECHAZADO</span>
+      {% endif %}
+    </div>
+    {% if not proyecto %}
+    <div>
+      <div style="font-family:var(--mono);font-size:.52rem;color:var(--muted);margin-bottom:.5rem;text-transform:uppercase">Cambiar estado</div>
+      <select id="estado-sel" onchange="cambiarEstado()" style="background:var(--card);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:.55rem;padding:.35rem .6rem;outline:none;width:140px">
+        <option value="borrador" {% if presupuesto.estado=='borrador' %}selected{% endif %}>Borrador</option>
+        <option value="enviado" {% if presupuesto.estado=='enviado' %}selected{% endif %}>Enviado</option>
+        <option value="aceptado" {% if presupuesto.estado=='aceptado' %}selected{% endif %}>Aceptado ✓</option>
+        <option value="rechazado" {% if presupuesto.estado=='rechazado' %}selected{% endif %}>Rechazado</option>
+      </select>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% if presupuesto.notas %}
+<div class="panel" style="margin-bottom:1.2rem">
+  <div class="panel-body" style="display:flex;gap:.8rem">
+    <span style="color:var(--accent)">📌</span>
+    <span style="font-size:.82rem;color:var(--muted2)">{{ presupuesto.notas }}</span>
+  </div>
+</div>
+{% endif %}
+
+<div class="grid-60-40">
+  <!-- DESGLOSE -->
+  <div class="panel">
+    <div class="panel-header"><span class="panel-title">Desglose económico</span></div>
+    <div class="panel-body">
+      <div style="display:flex;flex-direction:column;gap:.8rem">
+        <div style="display:flex;justify-content:space-between;padding:.6rem 0;border-bottom:1px solid var(--border)">
+          <span style="font-family:var(--mono);font-size:.52rem;color:var(--muted);text-transform:uppercase">Base imponible</span>
+          <span style="font-family:var(--mono);font-size:1rem;color:#fff">{{ "%.2f"|format(presupuesto.importe) }}€</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:.6rem 0;border-bottom:1px solid var(--border)">
+          <span style="font-family:var(--mono);font-size:.52rem;color:var(--muted);text-transform:uppercase">IVA (21%)</span>
+          <span style="font-family:var(--mono);font-size:1rem;color:var(--green)">+{{ "%.2f"|format(presupuesto.importe * 0.21) }}€</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:.6rem 0;border-bottom:1px solid var(--border)">
+          <span style="font-family:var(--mono);font-size:.52rem;color:var(--muted);text-transform:uppercase">IRPF (15%)</span>
+          <span style="font-family:var(--mono);font-size:1rem;color:var(--red)">-{{ "%.2f"|format(presupuesto.importe * 0.15) }}€</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:.8rem;background:rgba(232,108,47,.08)">
+          <span style="font-family:var(--mono);font-size:.6rem;text-transform:uppercase;font-weight:500">Total cliente paga</span>
+          <span style="font-family:var(--mono);font-size:1.4rem;color:var(--accent)">
+            {{ "%.2f"|format(presupuesto.importe + presupuesto.importe*0.21 - presupuesto.importe*0.15) }}€
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROYECTO GENERADO / ACCIONES -->
+  <div style="display:flex;flex-direction:column;gap:1.2rem">
+    {% if proyecto %}
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Proyecto generado</span></div>
+      <div class="panel-body">
+        <div style="background:rgba(46,204,113,.08);padding:.8rem;border-left:2px solid var(--green);margin-bottom:.8rem">
+          <div style="font-family:var(--mono);font-size:.6rem;color:var(--green);margin-bottom:.3rem">✓ PRESUPUESTO ACEPTADO</div>
+          <div style="font-size:.82rem;color:var(--text)">Se ha creado automáticamente el proyecto:</div>
+        </div>
+        <a href="/proyecto/{{ proyecto.id }}" style="text-decoration:none;display:block;background:var(--card);padding:.8rem;border:1px solid var(--border);transition:border-color .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div style="font-family:var(--mono);font-size:.62rem;color:var(--accent);margin-bottom:.3rem">{{ proyecto.referencia }}</div>
+          <div style="font-size:.85rem;color:#fff">{{ proyecto.nombre }}</div>
+          <div style="margin-top:.5rem;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-family:var(--mono);font-size:.58rem;color:var(--muted)">Progreso: {{ proyecto.progreso }}%</span>
+            <span class="btn btn-sm">Ver proyecto →</span>
+          </div>
+        </a>
+      </div>
+    </div>
+    {% else %}
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Acciones</span></div>
+      <div class="panel-body">
+        <p style="font-size:.82rem;color:var(--muted2);margin-bottom:.8rem">
+          Cambia el estado a <strong style="color:var(--green)">"Aceptado"</strong> para crear automáticamente un proyecto vinculado.
+        </p>
+        {% if presupuesto.estado != 'rechazado' %}
+        <div style="display:flex;flex-direction:column;gap:.5rem">
+          <button class="btn btn-primary" style="width:100%" onclick="aceptarPresupuesto()">✓ Aceptar presupuesto</button>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- FLUJO -->
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Flujo del presupuesto</span></div>
+      <div class="panel-body" style="padding:.6rem 1rem">
+        <div class="timeline">
+          <div class="tl-item">
+            <div class="tl-dot green"></div>
+            <div class="tl-date">{{ presupuesto.fecha_emision }}</div>
+            <div class="tl-text"><strong>Presupuesto creado</strong> · {{ presupuesto.numero }}</div>
+          </div>
+          {% if presupuesto.estado in ['enviado', 'aceptado', 'rechazado'] %}
+          <div class="tl-item">
+            <div class="tl-dot {% if presupuesto.estado == 'enviado' %}orange{% else %}green{% endif %}"></div>
+            <div class="tl-date">Estado actual</div>
+            <div class="tl-text"><strong>Presupuesto {{ presupuesto.estado }}</strong></div>
+          </div>
+          {% endif %}
+          {% if proyecto %}
+          <div class="tl-item">
+            <div class="tl-dot green"></div>
+            <div class="tl-date">{{ proyecto.fecha_creacion }}</div>
+            <div class="tl-text"><strong>Proyecto creado</strong> → {{ proyecto.referencia }}</div>
+          </div>
+          {% else %}
+          <div class="tl-item">
+            <div class="tl-dot muted"></div>
+            <div class="tl-date">Pendiente</div>
+            <div class="tl-text" style="color:var(--muted)">Proyecto (se crea al aceptar)</div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- ELIMINAR -->
+    {% if not proyecto and presupuesto.estado in ['borrador', 'rechazado'] %}
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Zona de peligro</span></div>
+      <div class="panel-body">
+        <form method="POST" action="/presupuesto/{{ presupuesto.id }}/eliminar" onsubmit="return confirm('¿Eliminar este presupuesto permanentemente?')">
+          <button type="submit" class="btn btn-danger" style="width:100%">✕ Eliminar presupuesto</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- MODAL EDITAR -->
+<div id="modal-editar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--border);padding:2rem;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;margin-bottom:1.2rem">
+      <span style="font-family:var(--display);font-size:1.2rem;color:#fff">EDITAR PRESUPUESTO</span>
+      <button onclick="document.getElementById('modal-editar').style.display='none'" style="background:none;border:none;color:var(--muted);cursor:pointer">✕</button>
+    </div>
+    <form method="POST" action="/presupuesto/{{ presupuesto.id }}/editar">
+      <div class="form-grid">
+        <div class="form-field"><label class="form-label">Descripción</label>
+          <input name="descripcion" class="form-input" value="{{ presupuesto.descripcion }}" required/>
+        </div>
+      </div>
+      <div class="form-grid cols-2">
+        <div class="form-field"><label class="form-label">Servicio</label>
+          <select name="servicio" class="form-select">
+            {% for s in ['Diseño mecánico','Fabricación integral','Renderizado 3D','Consultoría','Apoyo técnico','Planos técnicos'] %}
+            <option {% if presupuesto.servicio==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-field"><label class="form-label">Importe (€)</label>
+          <input name="importe" type="number" step="0.01" class="form-input" value="{{ presupuesto.importe }}" required/>
+        </div>
+      </div>
+      <div class="form-grid cols-2">
+        <div class="form-field"><label class="form-label">F. Emisión</label>
+          <input name="fecha_emision" type="date" class="form-input" value="{{ presupuesto.fecha_emision }}"/>
+        </div>
+        <div class="form-field"><label class="form-label">Validez hasta</label>
+          <input name="fecha_validez" type="date" class="form-input" value="{{ presupuesto.fecha_validez }}"/>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="form-field"><label class="form-label">Notas / condiciones</label>
+          <textarea name="notas" class="form-textarea">{{ presupuesto.notas or '' }}</textarea>
+        </div>
+      </div>
+      <div style="display:flex;gap:.6rem;margin-top:.5rem">
+        <button type="submit" class="btn btn-primary">Guardar cambios</button>
+        <button type="button" onclick="document.getElementById('modal-editar').style.display='none'" class="btn">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function cambiarEstado() {
+  const estado = document.getElementById('estado-sel').value;
+  fetch('/presupuesto/{{ presupuesto.id }}/estado', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({estado: estado})
+  }).then(() => {
+    if (estado === 'aceptado') {
+      alert('Presupuesto aceptado. Se ha creado el proyecto automáticamente.');
+      location.reload();
+    } else {
+      location.reload();
+    }
+  });
+}
+function aceptarPresupuesto() {
+  if (confirm('¿Aceptar este presupuesto? Se creará un proyecto automáticamente.')) {
+    document.getElementById('estado-sel').value = 'aceptado';
+    cambiarEstado();
+  }
+}
+</script>
+{% endblock %}

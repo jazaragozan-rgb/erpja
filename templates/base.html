@@ -131,6 +131,9 @@
     <a href="/clientes" class="sb-item {{ 'active' if 'cliente' in request.path else '' }}">
       <span class="sb-icon">◎</span> CRM / Clientes
     </a>
+    <a href="/presupuestos" class="sb-item {{ 'active' if 'presupuesto' in request.path and 'cliente' not in request.path else '' }}">
+      <span class="sb-icon">◈</span> Presupuestos
+    </a>
     <a href="/proyectos" class="sb-item {{ 'active' if 'proyect' in request.path else '' }}">
       <span class="sb-icon">◧</span> Proyectos
     </a>

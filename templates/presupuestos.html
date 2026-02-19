@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}· Presupuestos{% endblock %}
+{% block topbar %}
+<div><div class="topbar-title">PRESUPUESTOS</div><div class="topbar-sub">Gestión comercial y ofertas</div></div>
+<div class="topbar-right">
+  <a href="/cliente/nuevo" class="btn">+ Nuevo cliente</a>
+</div>
+{% endblock %}
+{% block content %}
+<div class="kpi-row">
+  <div class="kpi orange"><div class="kpi-label">Total presupuestos</div><div class="kpi-value">{{ stats.total }}</div></div>
+  <div class="kpi yellow"><div class="kpi-label">Enviados</div><div class="kpi-value">{{ stats.enviados }}</div><div class="kpi-sub">{{ "%.0f"|format(stats.importe_enviados) }}€ en juego</div></div>
+  <div class="kpi green"><div class="kpi-label">Aceptados</div><div class="kpi-value">{{ stats.aceptados }}</div><div class="kpi-sub">{% if stats.total > 0 %}{{ ((stats.aceptados / stats.total * 100)|int) }}% conversión{% endif %}</div></div>
+  <div class="kpi red"><div class="kpi-label">Rechazados</div><div class="kpi-value">{{ stats.rechazados }}</div></div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <span class="panel-title">Todos los presupuestos</span>
+    <div style="display:flex;gap:.5rem">
+      <select onchange="filtrarPresupuestos(this.value)" style="background:var(--card);border:1px solid var(--border);color:var(--muted2);font-family:var(--mono);font-size:.55rem;padding:.3rem .5rem;outline:none">
+        <option value="">Todos</option>
+        <option value="borrador">Borradores</option>
+        <option value="enviado">Enviados</option>
+        <option value="aceptado">Aceptados</option>
+        <option value="rechazado">Rechazados</option>
+      </select>
+    </div>
+  </div>
+  <table class="table" id="tabla-presupuestos">
+    <thead><tr><th>Número</th><th>Cliente</th><th>Descripción</th><th>Servicio</th><th>Importe</th><th>F. Emisión</th><th>Validez</th><th>Estado</th><th>Proyecto</th><th></th></tr></thead>
+    <tbody>
+      {% for p in presupuestos %}
+      <tr data-estado="{{ p.estado }}">
+        <td><span style="font-family:var(--mono);font-size:.62rem;color:var(--accent)">{{ p.numero }}</span></td>
+        <td>
+          <div style="font-size:.8rem">{{ p.cliente_nombre }}</div>
+          {% if p.cliente_empresa %}<div style="font-size:.7rem;color:var(--muted2)">{{ p.cliente_empresa }}</div>{% endif %}
+        </td>
+        <td style="color:var(--muted2);font-size:.78rem;max-width:200px">
+          {{ p.descripcion[:50] }}{% if p.descripcion|length > 50 %}...{% endif %}
+        </td>
+        <td style="font-size:.75rem;color:var(--muted2)">{{ p.servicio }}</td>
+        <td style="font-family:var(--mono);font-size:.78rem;color:#fff">{{ "%.2f"|format(p.importe) }}€</td>
+        <td style="font-family:var(--mono);font-size:.65rem;color:var(--muted2)">{{ p.fecha_emision }}</td>
+        <td style="font-family:var(--mono);font-size:.65rem;color:var(--muted2)">{{ p.fecha_validez }}</td>
+        <td>
+          {% if p.estado == 'borrador' %}<span class="badge badge-muted">Borrador</span>
+          {% elif p.estado == 'enviado' %}<span class="badge badge-yellow">Enviado</span>
+          {% elif p.estado == 'aceptado' %}<span class="badge badge-green">Aceptado</span>
+          {% elif p.estado == 'rechazado' %}<span class="badge badge-red">Rechazado</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if p.proyecto_ref %}
+          <a href="/proyecto/{{ p.proyecto_id }}" style="font-family:var(--mono);font-size:.62rem;color:var(--accent);text-decoration:none">
+            {{ p.proyecto_ref }} →
+          </a>
+          {% else %}
+          <span style="color:var(--muted);font-size:.7rem">—</span>
+          {% endif %}
+        </td>
+        <td><a href="/presupuesto/{{ p.id }}" class="btn btn-sm">Ver →</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="10" class="empty">No hay presupuestos todavía</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="panel" style="max-width:600px">
+  <div class="panel-header"><span class="panel-title">Flujo de trabajo</span></div>
+  <div class="panel-body" style="font-size:.82rem;color:var(--muted2);line-height:1.5">
+    <p style="margin-bottom:.8rem">
+      Los presupuestos creados desde <strong style="color:var(--text)">CRM / Clientes</strong> aparecen aquí automáticamente.
+    </p>
+    <div style="margin-bottom:.8rem;padding:.8rem;background:rgba(232,108,47,.05);border-left:2px solid var(--accent)">
+      ⚡ Cuando marcas un presupuesto como <strong style="color:var(--green)">"Aceptado"</strong>, se crea automáticamente un <strong style="color:var(--accent)">proyecto</strong> vinculado.
+    </div>
+    <p>
+      Desde ahí puedes gestionar horas, pedidos a proveedores, y seguir el flujo completo hasta la facturación.
+    </p>
+  </div>
+</div>
+
+<script>
+function filtrarPresupuestos(estado) {
+  document.querySelectorAll('#tabla-presupuestos tbody tr[data-estado]').forEach(r => {
+    r.style.display = (!estado || r.dataset.estado === estado) ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}
