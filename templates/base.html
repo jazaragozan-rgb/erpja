@@ -122,7 +122,7 @@
     </svg>
     <div><div class="sb-logo-name">JA · ERP</div><div class="sb-logo-sub">Sistema de gestión</div></div>
   </div>
-  <nav class="sb-nav">
+<nav class="sb-nav">
     <div class="sb-group">Principal</div>
     <a href="/dashboard" class="sb-item {{ 'active' if request.path=='/dashboard' or request.path=='/' else '' }}">
       <span class="sb-icon">◈</span> Dashboard
@@ -136,6 +136,9 @@
     </a>
     <a href="/proyectos" class="sb-item {{ 'active' if 'proyect' in request.path else '' }}">
       <span class="sb-icon">◧</span> Proyectos
+    </a>
+    <a href="/pedidos" class="sb-item {{ 'active' if 'pedidos' in request.path and 'proveedor' not in request.path else '' }}">
+      <span class="sb-icon">◨</span> Pedidos
     </a>
     <a href="/albaranes" class="sb-item {{ 'active' if 'albaran' in request.path else '' }}">
       <span class="sb-icon">◫</span> Albaranes

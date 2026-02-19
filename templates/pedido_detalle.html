@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block title %}· {{ pedido.numero }}{% endblock %}
+{% block topbar %}
+<div><div class="topbar-title">{{ pedido.numero }}</div><div class="topbar-sub">Pedido a proveedor</div></div>
+<div class="topbar-right">
+  <a href="/pedidos" class="btn">← Pedidos</a>
+  <a href="/proveedor/{{ pedido.proveedor_id }}" class="btn">Ver proveedor</a>
+  {% if pedido.proyecto_id %}
+  <a href="/proyecto/{{ pedido.proyecto_id }}" class="btn btn-primary">Ver proyecto →</a>
+  {% endif %}
+</div>
+{% endblock %}
+{% block content %}
+
+<div class="detail-header">
+  <div>
+    <div style="font-family:var(--mono);font-size:.6rem;color:var(--muted);margin-bottom:.3rem">{{ pedido.numero }} · PEDIDO A PROVEEDOR</div>
+    <div class="detail-name">{{ pedido.concepto }}</div>
+    <div class="detail-company">{{ pedido.proveedor_nombre }} · {{ pedido.proveedor_empresa or '' }}</div>
+    <div class="detail-meta">
+      <div class="detail-meta-item">📅 Pedido: <span>{{ pedido.fecha_pedido }}</span></div>
+      <div class="detail-meta-item">🚚 Entrega esp.: <span>{{ pedido.fecha_entrega_esperada or '—' }}</span></div>
+      <div class="detail-meta-item">💰 Importe: <span>{{ "%.2f"|format(pedido.importe) }}€</span></div>
+      {% if pedido.proveedor_email %}<div class="detail-meta-item">✉ <span>{{ pedido.proveedor_email }}</span></div>{% endif %}
+      {% if pedido.proveedor_telefono %}<div class="detail-meta-item">📞 <span>{{ pedido.proveedor_telefono }}</span></div>{% endif %}
+    </div>
+  </div>
+  <div style="text-align:right">
+    <div style="margin-bottom:1rem">
+      {% if pedido.estado == 'pendiente' %}<span class="badge badge-muted" style="font-size:.65rem;padding:.4rem .9rem">⏳ PENDIENTE</span>
+      {% elif pedido.estado == 'en_produccion' %}<span class="badge badge-blue" style="font-size:.65rem;padding:.4rem .9rem">⚙ EN PRODUCCIÓN</span>
+      {% elif pedido.estado == 'en_transito' %}<span class="badge badge-yellow" style="font-size:.65rem;padding:.4rem .9rem">🚚 EN TRÁNSITO</span>
+      {% elif pedido.estado == 'recibido' %}<span class="badge badge-green" style="font-size:.65rem;padding:.4rem .9rem">✓ RECIBIDO</span>
+      {% elif pedido.estado == 'cancelado' %}<span class="badge badge-red" style="font-size:.65rem;padding:.4rem .9rem">✗ CANCELADO</span>
+      {% endif %}
+    </div>
+    {% if pedido.estado != 'recibido' and pedido.estado != 'cancelado' %}
+    <div>
+      <div style="font-family:var(--mono);font-size:.52rem;color:var(--muted);margin-bottom:.5rem;text-transform:uppercase">Cambiar estado</div>
+      <select id="estado-sel" onchange="cambiarEstado()" style="background:var(--card);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:.55rem;padding:.35rem .6rem;outline:none;width:160px">
+        <option value="pendiente" {% if pedido.estado=='pendiente' %}selected{% endif %}>Pendiente</option>
+        <option value="en_produccion" {% if pedido.estado=='en_produccion' %}selected{% endif %}>En producción</option>
+        <option value="en_transito" {% if pedido.estado=='en_transito' %}selected{% endif %}>En tránsito</option>
+        <option value="recibido" {% if pedido.estado=='recibido' %}selected{% endif %}>Recibido ✓</option>
+        <option value="cancelado" {% if pedido.estado=='cancelado' %}selected{% endif %}>Cancelado</option>
+      </select>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% if pedido.notas %}
+<div class="panel" style="margin-bottom:1.2rem">
+  <div class="panel-body" style="display:flex;gap:.8rem">
+    <span style="color:var(--accent)">📌</span>
+    <span style="font-size:.82rem;color:var(--muted2)">{{ pedido.notas }}</span>
+  </div>
+</div>
+{% endif %}
+
+<div class="grid-60-40">
+  <!-- INFORMACIÓN DEL PEDIDO -->
+  <div class="panel">
+    <div class="panel-header"><span class="panel-title">Detalles del pedido</span></div>
+    <div class="panel-body">
+      <div style="display:flex;flex-direction:column;gap:.8rem">
+        <div>
+          <div style="font-family:var(--mono);font-size:.52rem;color:var(--muted);text-transform:uppercase;margin-bottom:.2rem">Proveedor</div>
+          <div style="font-size:.85rem;color:#fff">{{ pedido.proveedor_nombre }}</div>
+          {% if pedido.proveedor_empresa %}<div style="font-size:.75rem;color:var(--muted2)">{{ pedido.proveedor_empresa }}</div>{% endif %}
+        </div>
+        <div>
+          <div style="font-family:var(--mono);font-size:.52rem;color:var(--muted);text-transform:uppercase;margin-bottom:.2rem">Concepto</div>
+          <div style="font-size:.82rem;color:var(--text)">{{ pedido.concepto }}</div>
+        </div>
+        {% if pedido.proyecto_ref %}
+        <div>
+          <div style="font-family:var(--mono);font-size:.52rem;color:var(--muted);text-transform:uppercase;margin-bottom:.2rem">Proyecto vinculado</div>
+          <a href="/proyecto/{{ pedido.proyecto_id }}" style="font-family:var(--mono);font-size:.75rem;color:var(--accent);text-decoration:none">
+            {{ pedido.proyecto_ref }} · {{ pedido.proyecto_nombre }}
+          </a>
+        </div>
+        <div>
+          <div style="font-family:var(--mono);font-size:.52rem;color:var(--muted);text-transform:uppercase;margin-bottom:.2rem">Cliente final</div>
+          <div style="font-size:.82rem;color:var(--text)">{{ pedido.cliente_nombre }}</div>
+          {% if pedido.cliente_empresa %}<div style="font-size:.75rem;color:var(--muted2)">{{ pedido.cliente_empresa }}</div>{% endif %}
+        </div>
+        {% endif %}
+        <div style="padding-top:.5rem;border-top:1px solid var(--border)">
+          <div style="font-family:var(--mono);font-size:.52rem;color:var(--muted);text-transform:uppercase;margin-bottom:.2rem">Importe del pedido</div>
+          <div style="font-family:var(--mono);font-size:1.3rem;color:var(--accent)">{{ "%.2f"|format(pedido.importe) }}€</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ALBARÁN / FLUJO -->
+  <div style="display:flex;flex-direction:column;gap:1.2rem">
+    {% if pedido.albaran_numero %}
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Albarán generado</span></div>
+      <div class="panel-body">
+        <div style="background:rgba(46,204,113,.08);padding:.8rem;border-left:2px solid var(--green);margin-bottom:.8rem">
+          <div style="font-family:var(--mono);font-size:.6rem;color:var(--green);margin-bottom:.3rem">✓ PEDIDO RECIBIDO</div>
+          <div style="font-size:.82rem;color:var(--text)">Se ha generado el albarán de recepción:</div>
+        </div>
+        <a href="/albaran/{{ pedido.albaran_id }}" style="text-decoration:none;display:block;background:var(--card);padding:.8rem;border:1px solid var(--border);transition:border-color .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div style="font-family:var(--mono);font-size:.62rem;color:var(--accent);margin-bottom:.3rem">{{ pedido.albaran_numero }}</div>
+          <div style="font-size:.85rem;color:#fff">Fecha recepción: {{ pedido.albaran_fecha }}</div>
+          <div style="margin-top:.5rem">
+            <span class="btn btn-sm">Ver albarán →</span>
+          </div>
+        </a>
+      </div>
+    </div>
+    {% else %}
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Estado del pedido</span></div>
+      <div class="panel-body">
+        <p style="font-size:.82rem;color:var(--muted2);margin-bottom:.8rem">
+          Cambia el estado a <strong style="color:var(--green)">"Recibido"</strong> para generar automáticamente el albarán de recepción.
+        </p>
+        {% if pedido.estado != 'cancelado' %}
+        <button class="btn btn-primary" style="width:100%" onclick="marcarRecibido()">✓ Marcar como recibido</button>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- FLUJO -->
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Flujo del pedido</span></div>
+      <div class="panel-body" style="padding:.6rem 1rem">
+        <div class="timeline">
+          <div class="tl-item">
+            <div class="tl-dot green"></div>
+            <div class="tl-date">{{ pedido.fecha_pedido }}</div>
+            <div class="tl-text"><strong>Pedido realizado</strong> · {{ pedido.numero }}</div>
+          </div>
+          {% if pedido.estado in ['en_produccion', 'en_transito', 'recibido'] %}
+          <div class="tl-item">
+            <div class="tl-dot {% if pedido.estado == 'recibido' %}green{% else %}blue{% endif %}"></div>
+            <div class="tl-date">Estado actual</div>
+            <div class="tl-text"><strong>{{ pedido.estado|replace('_',' ')|title }}</strong></div>
+          </div>
+          {% endif %}
+          {% if pedido.albaran_numero %}
+          <div class="tl-item">
+            <div class="tl-dot green"></div>
+            <div class="tl-date">{{ pedido.albaran_fecha }}</div>
+            <div class="tl-text"><strong>Albarán generado</strong> → {{ pedido.albaran_numero }}</div>
+          </div>
+          {% else %}
+          <div class="tl-item">
+            <div class="tl-dot muted"></div>
+            <div class="tl-date">Pendiente</div>
+            <div class="tl-text" style="color:var(--muted)">Albarán (se crea al recibir)</div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function cambiarEstado() {
+  const estado = document.getElementById('estado-sel').value;
+  fetch('/pedido/{{ pedido.id }}/estado', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({estado: estado})
+  }).then(() => {
+    if (estado === 'recibido') {
+      alert('Pedido marcado como recibido. Se ha creado el albarán automáticamente.');
+      location.reload();
+    } else {
+      location.reload();
+    }
+  });
+}
+function marcarRecibido() {
+  if (confirm('¿Marcar este pedido como recibido? Se creará un albarán automáticamente.')) {
+    document.getElementById('estado-sel').value = 'recibido';
+    cambiarEstado();
+  }
+}
+</script>
+{% endblock %}

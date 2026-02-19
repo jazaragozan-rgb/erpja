@@ -720,6 +720,54 @@ def pedido_estado(id):
     conn.close()
     return jsonify({'ok':True})
 
+# ── PEDIDOS A PROVEEDORES ─────────────────────────────────────────────────────
+@app.route('/pedidos')
+def pedidos_listado():
+    conn = get_db()
+    pedidos = conn.execute('''SELECT pp.*, 
+        pv.nombre as proveedor_nombre, pv.empresa as proveedor_empresa,
+        p.referencia as proyecto_ref, p.nombre as proyecto_nombre,
+        c.nombre as cliente_nombre, c.empresa as cliente_empresa,
+        a.id as albaran_id, a.numero as albaran_numero
+        FROM pedidos_proveedor pp
+        JOIN proveedores pv ON pv.id = pp.proveedor_id
+        LEFT JOIN proyectos p ON p.id = pp.proyecto_id
+        LEFT JOIN clientes c ON c.id = p.cliente_id
+        LEFT JOIN albaranes a ON a.pedido_id = pp.id
+        ORDER BY pp.fecha_pedido DESC''').fetchall()
+    stats = {
+        'total': conn.execute("SELECT COUNT(*) FROM pedidos_proveedor").fetchone()[0],
+        'pendientes': conn.execute("SELECT COUNT(*) FROM pedidos_proveedor WHERE estado='pendiente'").fetchone()[0],
+        'en_produccion': conn.execute("SELECT COUNT(*) FROM pedidos_proveedor WHERE estado='en_produccion'").fetchone()[0],
+        'en_transito': conn.execute("SELECT COUNT(*) FROM pedidos_proveedor WHERE estado='en_transito'").fetchone()[0],
+        'recibidos': conn.execute("SELECT COUNT(*) FROM pedidos_proveedor WHERE estado='recibido'").fetchone()[0],
+        'importe_pendiente': conn.execute("SELECT COALESCE(SUM(importe),0) FROM pedidos_proveedor WHERE estado NOT IN ('recibido','cancelado')").fetchone()[0],
+    }
+    proveedores = conn.execute("SELECT DISTINCT nombre FROM proveedores ORDER BY nombre").fetchall()
+    clientes = conn.execute("SELECT DISTINCT nombre FROM clientes ORDER BY nombre").fetchall()
+    proyectos = conn.execute("SELECT DISTINCT referencia FROM proyectos ORDER BY referencia DESC").fetchall()
+    conn.close()
+    return render_template('pedidos.html', pedidos=pedidos, stats=stats, 
+                         proveedores=proveedores, clientes=clientes, proyectos=proyectos)
+
+@app.route('/pedido/<int:id>/detalle')
+def pedido_detalle_view(id):
+    conn = get_db()
+    pedido = conn.execute('''SELECT pp.*,
+        pv.nombre as proveedor_nombre, pv.empresa as proveedor_empresa, 
+        pv.email as proveedor_email, pv.telefono as proveedor_telefono,
+        p.referencia as proyecto_ref, p.nombre as proyecto_nombre, p.cliente_id,
+        c.nombre as cliente_nombre, c.empresa as cliente_empresa,
+        a.id as albaran_id, a.numero as albaran_numero, a.fecha_recepcion as albaran_fecha
+        FROM pedidos_proveedor pp
+        JOIN proveedores pv ON pv.id = pp.proveedor_id
+        LEFT JOIN proyectos p ON p.id = pp.proyecto_id
+        LEFT JOIN clientes c ON c.id = p.cliente_id
+        LEFT JOIN albaranes a ON a.pedido_id = pp.id
+        WHERE pp.id=?''',(id,)).fetchone()
+    conn.close()
+    return render_template('pedido_detalle.html', pedido=pedido)
+
 # ── ALBARANES ─────────────────────────────────────────────────────────────────
 @app.route('/albaranes')
 def albaranes():
