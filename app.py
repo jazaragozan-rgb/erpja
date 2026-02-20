@@ -12,9 +12,13 @@ from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.lib.colors import HexColor
 import io
+from plm_module import plm, init_plm_db
+from plm_explorer_routes import plm_explorer
 
 app = Flask(__name__)
 DB = os.path.join(os.path.dirname(__file__), 'crm.db')
+app.register_blueprint(plm)
+app.register_blueprint(plm_explorer)
 
 # ── DB ────────────────────────────────────────────────────────────────────────
 def get_db():
@@ -178,6 +182,7 @@ def init_db():
 
     conn.commit()
     conn.close()
+    init_plm_db()
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
 def next_num(tabla, campo, prefijo):

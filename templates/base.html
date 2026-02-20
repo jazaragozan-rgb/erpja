@@ -149,6 +149,13 @@
     <a href="/proveedores" class="sb-item {{ 'active' if 'proveedor' in request.path else '' }}">
       <span class="sb-icon">◪</span> Proveedores
     </a>
+       <div class="sb-group">Ingeniería</div>
+        <a href="/plm" class="sb-item {{ 'active' if request.path=='/plm' else '' }}">
+      <span class="sb-icon">◈</span> PLM
+    </a>
+    <a href="/plm/explorer" class="sb-item {{ 'active' if 'explorer' in request.path else '' }}">
+      <span class="sb-icon">▸</span> PDM Explorer
+    </a>
   </nav>
   <div class="sb-footer">
     <div class="sb-user">

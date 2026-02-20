@@ -1,0 +1,672 @@
+{% extends "base.html" %}
+{% block title %}— PDM Explorer{% endblock %}
+
+{% block topbar %}
+<div style="display:flex;align-items:center;gap:1rem;flex:1;min-width:0">
+  <span style="font-family:var(--display);font-size:1.3rem;letter-spacing:.06em;color:#fff;white-space:nowrap">PDM EXPLORER</span>
+  <span style="font-family:var(--mono);font-size:.5rem;color:var(--muted);letter-spacing:.15em;white-space:nowrap">EXPLORADOR DE ARCHIVOS CAD</span>
+  <div style="flex:1;min-width:0;max-width:480px;margin-left:.5rem">
+    <input id="path-input" type="text" placeholder="Escribe una ruta y pulsa Enter..."
+      style="width:100%;background:var(--card);border:1px solid var(--border);color:var(--text);
+             font-family:var(--mono);font-size:.6rem;padding:.4rem .75rem;outline:none;
+             letter-spacing:.05em"
+      onkeydown="if(event.key==='Enter')navigateTo(this.value)">
+  </div>
+</div>
+<div style="display:flex;gap:.5rem;align-items:center">
+  <span id="stat-total" style="font-family:var(--mono);font-size:.5rem;color:var(--muted)">PLM: {{ stats.total }} docs</span>
+  <button onclick="toggleView()" id="view-btn" class="btn-ghost" style="font-size:.6rem;padding:.3rem .6rem">⊞ GRID</button>
+  <a href="/plm" class="btn-ghost" style="font-size:.6rem;padding:.3rem .6rem;text-decoration:none">← PLM</a>
+</div>
+{% endblock %}
+
+{% block content %}
+<style>
+/* ── LAYOUT ── */
+.explorer-layout{display:grid;grid-template-columns:220px 1fr 280px;height:calc(100vh - 56px - 48px);overflow:hidden;gap:0}
+.sidebar-panel{border-right:1px solid var(--border);overflow-y:auto;background:var(--surface)}
+.main-panel{display:flex;flex-direction:column;overflow:hidden}
+.detail-panel{border-left:1px solid var(--border);overflow-y:auto;background:var(--surface)}
+
+/* ── SIDEBAR TREE ── */
+.tree-section{padding:.5rem 0}
+.tree-header{font-family:var(--mono);font-size:.45rem;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;padding:.4rem 1rem;display:flex;align-items:center;gap:.4rem}
+.tree-item{display:flex;align-items:center;gap:.5rem;padding:.35rem 1rem;cursor:pointer;font-size:.72rem;color:var(--muted2);transition:all .1s;white-space:nowrap;overflow:hidden}
+.tree-item:hover{background:rgba(255,255,255,.04);color:var(--text)}
+.tree-item.active{background:rgba(232,108,47,.08);color:var(--accent);border-left:2px solid var(--accent)}
+.tree-item .icon{font-size:.8rem;min-width:14px;text-align:center}
+.tree-item .name{overflow:hidden;text-overflow:ellipsis;flex:1}
+
+/* ── TOOLBAR ── */
+.explorer-toolbar{padding:.5rem .75rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.5rem;flex-shrink:0;background:var(--surface)}
+.nav-btn{background:var(--card);border:1px solid var(--border);color:var(--muted);font-size:.75rem;width:24px;height:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0}
+.nav-btn:hover:not(:disabled){color:var(--text);border-color:var(--border2)}
+.nav-btn:disabled{opacity:.3;cursor:default}
+.breadcrumb{display:flex;align-items:center;gap:0;font-family:var(--mono);font-size:.52rem;flex:1;overflow:hidden;white-space:nowrap}
+.bc-part{color:var(--muted);cursor:pointer;padding:.2rem .3rem;transition:color .1s;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+.bc-part:hover{color:var(--accent)}
+.bc-part.last{color:var(--text)}
+.bc-sep{color:var(--border2);padding:0 .1rem}
+
+/* ── FILE LIST ── */
+.file-area{flex:1;overflow-y:auto;padding:.5rem}
+.file-count{font-family:var(--mono);font-size:.48rem;color:var(--muted);letter-spacing:.12em;padding:.3rem .5rem;margin-bottom:.3rem}
+
+/* LIST VIEW */
+.file-list{width:100%;border-collapse:collapse}
+.file-list th{font-family:var(--mono);font-size:.44rem;letter-spacing:.15em;color:var(--muted);text-transform:uppercase;padding:.35rem .5rem;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none}
+.file-list th:hover{color:var(--text)}
+.file-list td{padding:.4rem .5rem;border-bottom:1px solid rgba(255,255,255,.03);vertical-align:middle;font-size:.73rem}
+.file-list tr{cursor:pointer;transition:background .08s}
+.file-list tr:hover td{background:rgba(255,255,255,.03)}
+.file-list tr.selected td{background:rgba(232,108,47,.07);border-bottom-color:rgba(232,108,47,.15)}
+.file-list tr.selected td:first-child{border-left:2px solid var(--accent)}
+
+/* GRID VIEW */
+.file-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:.4rem;padding:.25rem}
+.grid-item{padding:.6rem .4rem;background:var(--card);border:1px solid var(--border);cursor:pointer;text-align:center;transition:all .12s;display:flex;flex-direction:column;align-items:center;gap:.3rem}
+.grid-item:hover{border-color:var(--border2);background:var(--panel)}
+.grid-item.selected{border-color:var(--accent);background:rgba(232,108,47,.07)}
+.grid-icon{font-size:1.6rem;line-height:1}
+.grid-name{font-size:.55rem;color:var(--text);word-break:break-word;text-align:center;line-height:1.3;max-height:2.4em;overflow:hidden}
+.grid-ext{font-family:var(--mono);font-size:.44rem;color:var(--muted);text-transform:uppercase}
+
+/* BADGES */
+.plm-chip{display:inline-flex;align-items:center;gap:.25rem;padding:.1rem .35rem;font-family:var(--mono);font-size:.42rem;letter-spacing:.06em;border-radius:2px;text-transform:uppercase}
+.plm-chip.registered{background:rgba(46,204,113,.12);color:#2ecc71;border:1px solid rgba(46,204,113,.25)}
+.plm-chip.unregistered{background:rgba(85,85,85,.12);color:#555;border:1px solid rgba(85,85,85,.2)}
+.estado-chip{display:inline-block;padding:.08rem .3rem;font-family:var(--mono);font-size:.4rem;letter-spacing:.08em;text-transform:uppercase;border-radius:2px}
+.estado-en_diseno{background:rgba(52,152,219,.15);color:#3498db;border:1px solid rgba(52,152,219,.3)}
+.estado-revision{background:rgba(243,156,18,.15);color:#f39c12;border:1px solid rgba(243,156,18,.3)}
+.estado-aprobado{background:rgba(46,204,113,.15);color:#2ecc71;border:1px solid rgba(46,204,113,.3)}
+.estado-liberado{background:rgba(155,89,182,.15);color:#9b59b6;border:1px solid rgba(155,89,182,.3)}
+
+/* DETAIL PANEL */
+.detail-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--muted);gap:.75rem}
+.detail-icon{font-size:3rem;opacity:.3}
+.detail-section{padding:.75rem 1rem;border-bottom:1px solid var(--border)}
+.detail-title{font-family:var(--mono);font-size:.44rem;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;margin-bottom:.6rem}
+.detail-row{display:flex;justify-content:space-between;padding:.25rem 0;font-size:.7rem}
+.detail-lbl{color:var(--muted);font-family:var(--mono);font-size:.46rem;text-transform:uppercase;letter-spacing:.06em}
+.detail-val{color:var(--text);text-align:right;max-width:150px;word-break:break-word}
+.btn-action{width:100%;padding:.5rem;font-family:var(--mono);font-size:.52rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:all .15s;border:1px solid;display:flex;align-items:center;justify-content:center;gap:.4rem;margin-bottom:.4rem}
+.btn-open{background:rgba(232,108,47,.1);border-color:rgba(232,108,47,.4);color:var(--accent)}
+.btn-open:hover{background:rgba(232,108,47,.2);border-color:var(--accent)}
+.btn-register{background:rgba(46,204,113,.08);border-color:rgba(46,204,113,.3);color:#2ecc71}
+.btn-register:hover{background:rgba(46,204,113,.18);border-color:#2ecc71}
+.btn-watchfolder{background:rgba(52,152,219,.08);border-color:rgba(52,152,219,.3);color:#3498db}
+.btn-watchfolder:hover{background:rgba(52,152,219,.18);border-color:#3498db}
+.btn-view-plm{background:rgba(155,89,182,.08);border-color:rgba(155,89,182,.3);color:#9b59b6}
+.btn-view-plm:hover{background:rgba(155,89,182,.18);border-color:#9b59b6}
+
+/* LOADING */
+.loading-spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* TOAST */
+.toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--card);border:1px solid var(--border);padding:.75rem 1.25rem;font-family:var(--mono);font-size:.6rem;letter-spacing:.08em;z-index:9999;transform:translateY(100px);opacity:0;transition:all .3s;max-width:320px}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.ok{border-left:3px solid #2ecc71;color:#2ecc71}
+.toast.err{border-left:3px solid #e74c3c;color:#e74c3c}
+.toast.info{border-left:3px solid var(--accent);color:var(--accent)}
+
+/* MODAL REGISTER */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center}
+.modal-box{background:var(--panel);border:1px solid var(--border);padding:2rem;width:420px;max-width:95vw}
+</style>
+
+<div class="explorer-layout">
+
+  <!-- ── SIDEBAR IZQUIERDA ── -->
+  <div class="sidebar-panel">
+    <!-- Favoritos / Watch Folders -->
+    <div class="tree-section">
+      <div class="tree-header">⚡ Watch Folders</div>
+      {% if favoritos %}
+        {% for fav in favoritos %}
+        {% set fav_name = fav.ruta.replace('\\', '/').split('/')[-1] or fav.ruta %}
+        <div class="tree-item" data-path="{{ fav.ruta }}"
+             onclick="navigateToDataPath(this)"
+             title="{{ fav.ruta }}">
+          <span class="icon" style="color:{% if fav.software == 'solidworks' %}#e86c2f{% elif fav.software == 'autocad' %}#3498db{% else %}#2ecc71{% endif %}">◈</span>
+          <span class="name">{{ fav_name }}</span>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div style="padding:.5rem 1rem;font-size:.65rem;color:var(--muted)">Sin carpetas</div>
+      {% endif %}
+    </div>
+
+    <div style="border-top:1px solid var(--border)"></div>
+
+    <!-- Accesos rápidos -->
+    <div class="tree-section">
+      <div class="tree-header">⊕ Accesos Rápidos</div>
+      <div class="tree-item" onclick="navigateTo(HOME_PATH)">
+        <span class="icon">⌂</span><span class="name">Inicio</span>
+      </div>
+      <div class="tree-item" onclick="navigateTo(DOCS_PATH)">
+        <span class="icon">▤</span><span class="name">Documentos</span>
+      </div>
+      <div class="tree-item" onclick="navigateTo(DESKTOP_PATH)">
+        <span class="icon">▪</span><span class="name">Escritorio</span>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid var(--border)"></div>
+
+    <!-- Últimos CAD registrados en PLM -->
+    <div class="tree-section">
+      <div class="tree-header">◈ Últimos en PLM</div>
+      <div id="recent-plm"></div>
+    </div>
+  </div>
+
+  <!-- ── PANEL CENTRAL ── -->
+  <div class="main-panel">
+    <!-- Toolbar -->
+    <div class="explorer-toolbar">
+      <button class="nav-btn" id="btn-back" onclick="goBack()" disabled title="Atrás">‹</button>
+      <button class="nav-btn" id="btn-fwd" onclick="goForward()" disabled title="Adelante">›</button>
+      <button class="nav-btn" onclick="reload()" title="Recargar">↺</button>
+      <div class="breadcrumb" id="breadcrumb"></div>
+      <div style="display:flex;align-items:center;gap:.4rem;margin-left:.5rem">
+        <input id="filter-input" placeholder="Filtrar..." type="text"
+          style="background:var(--card);border:1px solid var(--border);color:var(--text);
+                 font-family:var(--mono);font-size:.55rem;padding:.3rem .6rem;width:120px;outline:none"
+          oninput="filterItems(this.value)">
+        <label style="display:flex;align-items:center;gap:.3rem;font-family:var(--mono);font-size:.48rem;color:var(--muted);cursor:pointer;white-space:nowrap">
+          <input type="checkbox" id="cad-only" onchange="filterItems(document.getElementById('filter-input').value)"
+            style="accent-color:var(--accent)"> Solo CAD
+        </label>
+      </div>
+    </div>
+
+    <!-- File area -->
+    <div class="file-area" id="file-area">
+      <div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--muted)">
+        <div class="loading-spinner"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PANEL DETALLE ── -->
+  <div class="detail-panel" id="detail-panel">
+    <div class="detail-empty">
+      <div class="detail-icon">◈</div>
+      <div style="font-family:var(--mono);font-size:.55rem;letter-spacing:.12em;text-transform:uppercase">Selecciona un archivo</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- MODAL REGISTRAR EN PLM -->
+<div class="modal-overlay" id="modal-register">
+  <div class="modal-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
+      <span style="font-family:var(--display);font-size:1.3rem;color:#fff">REGISTRAR EN PLM</span>
+      <button onclick="closeModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2rem">✕</button>
+    </div>
+    <div id="modal-file-info" style="background:var(--card);border:1px solid var(--border);padding:.75rem;margin-bottom:1rem;font-family:var(--mono);font-size:.6rem;color:var(--muted2)"></div>
+    <div class="form-field">
+      <label class="form-label">Vincular a proyecto (opcional)</label>
+      <select id="modal-proyecto" class="form-select">
+        <option value="">Sin proyecto</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1.25rem">
+      <button onclick="closeModal()" class="btn-ghost">Cancelar</button>
+      <button onclick="confirmRegister()" class="btn-accent">REGISTRAR EN PLM</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────────────────────────
+const history_stack = [];
+let history_idx = -1;
+let current_path = '';
+let current_items = [];
+let selected_item = null;
+let view_mode = 'list'; // 'list' | 'grid'
+let register_pending = null;
+
+// Rutas reales calculadas en el servidor (sin ~ ni concatenaciones JS)
+const HOME_PATH    = {{ path_home    | tojson }};
+const DOCS_PATH    = {{ path_docs    | tojson }};
+const DESKTOP_PATH = {{ path_desktop | tojson }};
+
+// ── INIT ───────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  navigateTo(HOME_PATH);
+  loadRecentPLM();
+});
+
+// ── NAVEGACIÓN ─────────────────────────────────────────────────────────────
+function navigateTo(path) {
+  if (!path) return;
+  document.getElementById('path-input').value = path;
+  showLoading();
+
+  fetch('/plm/explorer/browse?path=' + encodeURIComponent(path))
+    .then(r => r.json())
+    .then(d => {
+      if (d.error && d.items.length === 0) {
+        showToast('Error: ' + d.error, 'err');
+        hideLoading();
+        return;
+      }
+      // Actualizar historial
+      if (history_idx < history_stack.length - 1) {
+        history_stack.splice(history_idx + 1);
+      }
+      history_stack.push(path);
+      history_idx = history_stack.length - 1;
+      updateNavBtns();
+      loadItems(d);
+    })
+    .catch(() => { showToast('No se pudo acceder a la ruta', 'err'); hideLoading(); });
+}
+
+function goBack() {
+  if (history_idx > 0) {
+    history_idx--;
+    updateNavBtns();
+    loadPath(history_stack[history_idx]);
+  }
+}
+
+function goForward() {
+  if (history_idx < history_stack.length - 1) {
+    history_idx++;
+    updateNavBtns();
+    loadPath(history_stack[history_idx]);
+  }
+}
+
+function loadPath(path) {
+  document.getElementById('path-input').value = path;
+  showLoading();
+  fetch('/plm/explorer/browse?path=' + encodeURIComponent(path))
+    .then(r => r.json())
+    .then(d => loadItems(d))
+    .catch(() => hideLoading());
+}
+
+function reload() {
+  if (current_path) loadPath(current_path);
+}
+
+function updateNavBtns() {
+  document.getElementById('btn-back').disabled = history_idx <= 0;
+  document.getElementById('btn-fwd').disabled = history_idx >= history_stack.length - 1;
+}
+
+// ── RENDER ──────────────────────────────────────────────────────────────────
+function loadItems(data) {
+  current_path = data.path;
+  current_items = data.items || [];
+  selected_item = null;
+
+  document.getElementById('path-input').value = current_path;
+  renderBreadcrumb(data.breadcrumb || []);
+  renderFiles(current_items);
+  resetDetail();
+}
+
+function renderBreadcrumb(parts) {
+  const bc = document.getElementById('breadcrumb');
+  bc.innerHTML = parts.map((p, i) => {
+    const isLast = i === parts.length - 1;
+    const name = p.name.length > 18 ? p.name.slice(0,16)+'…' : p.name;
+    return `${i > 0 ? '<span class="bc-sep">›</span>' : ''}
+      <span class="bc-part ${isLast ? 'last' : ''}"
+        onclick="${isLast ? '' : `navigateTo('${esc(p.path)}')`}"
+        title="${p.name}">${name}</span>`;
+  }).join('');
+}
+
+function renderFiles(items) {
+  const area = document.getElementById('file-area');
+  const filterVal = document.getElementById('filter-input').value.toLowerCase();
+  const cadOnly = document.getElementById('cad-only').checked;
+
+  let filtered = items.filter(item => {
+    if (cadOnly && item.type === 'file' && !item.is_cad) return false;
+    if (filterVal && !item.name.toLowerCase().includes(filterVal)) return false;
+    return true;
+  });
+
+  const cadCount = filtered.filter(i => i.is_cad).length;
+
+  const countHtml = `<div class="file-count">
+    ${filtered.length} elementos${cadCount > 0 ? ` · <span style="color:var(--accent)">${cadCount} CAD</span>` : ''}
+    · <span style="color:var(--muted2)">${current_path}</span>
+  </div>`;
+
+  if (filtered.length === 0) {
+    area.innerHTML = countHtml + `<div style="text-align:center;padding:3rem;color:var(--muted)">
+      <div style="font-family:var(--display);font-size:1.5rem;margin-bottom:.4rem">CARPETA VACÍA</div>
+      <div style="font-size:.7rem">No hay archivos${cadOnly ? ' CAD' : ''} aquí</div>
+    </div>`;
+    return;
+  }
+
+  if (view_mode === 'grid') {
+    renderGrid(area, filtered, countHtml);
+  } else {
+    renderList(area, filtered, countHtml);
+  }
+}
+
+function renderList(area, items, countHtml) {
+  const rows = items.map((item, idx) => {
+    if (item.type === 'folder') {
+      return `<tr onclick="onItemClick(${idx})" ondblclick="navigateTo('${esc(item.path)}')" data-idx="${idx}">
+        <td style="width:20px"><span style="color:var(--accent2);font-size:.9rem">▸</span></td>
+        <td>
+          <span style="color:var(--text)">${escHtml(item.name)}</span>
+          ${item.is_cad ? `<span style="font-family:var(--mono);font-size:.44rem;color:var(--accent);margin-left:.5rem">${item.cad_count} CAD</span>` : ''}
+        </td>
+        <td style="color:var(--muted);font-family:var(--mono);font-size:.5rem">—</td>
+        <td></td>
+        <td style="color:var(--muted);font-family:var(--mono);font-size:.5rem">${item.modified}</td>
+      </tr>`;
+    }
+    // FILE
+    return `<tr onclick="onItemClick(${idx})" ondblclick="openFile('${esc(item.path)}')" data-idx="${idx}">
+      <td style="width:20px">
+        <span style="color:${item.color || '#555'};font-size:.85rem">${item.icon}</span>
+      </td>
+      <td>
+        <span style="color:${item.is_cad ? 'var(--text)' : 'var(--muted2)'}">
+          ${escHtml(item.name)}
+        </span>
+      </td>
+      <td style="font-family:var(--mono);font-size:.52rem;color:var(--muted2)">${item.size}</td>
+      <td>
+        ${item.is_cad ? `
+          <span class="plm-chip ${item.plm_registrado ? 'registered' : 'unregistered'}">
+            ${item.plm_registrado ? '● ' + item.plm_codigo : '○ SIN REG'}
+          </span>
+          ${item.plm_estado ? `<span class="estado-chip estado-${item.plm_estado}" style="margin-left:.3rem">${item.plm_estado.replace('_',' ')}</span>` : ''}
+        ` : ''}
+      </td>
+      <td style="color:var(--muted);font-family:var(--mono);font-size:.48rem">${item.modified}</td>
+    </tr>`;
+  }).join('');
+
+  area.innerHTML = countHtml + `
+    <table class="file-list">
+      <thead>
+        <tr>
+          <th style="width:24px"></th>
+          <th>Nombre</th>
+          <th style="width:70px">Tamaño</th>
+          <th style="width:160px">PLM</th>
+          <th style="width:130px">Modificado</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderGrid(area, items, countHtml) {
+  const cells = items.map((item, idx) => {
+    const isFolder = item.type === 'folder';
+    const icon = isFolder ? '▸' : (item.icon || '▪');
+    const color = isFolder ? 'var(--accent2)' : (item.color || 'var(--muted)');
+    return `<div class="grid-item" data-idx="${idx}"
+      onclick="onItemClick(${idx})"
+      ondblclick="${isFolder ? `navigateTo('${esc(item.path)}')` : `openFile('${esc(item.path)}')`}">
+      <div class="grid-icon" style="color:${color}">${icon}</div>
+      <div class="grid-name" title="${escHtml(item.name)}">${escHtml(item.name)}</div>
+      ${!isFolder ? `<div class="grid-ext">${item.ext || ''}</div>` : ''}
+      ${item.plm_registrado ? `<div style="width:6px;height:6px;border-radius:50%;background:#2ecc71"></div>` : ''}
+    </div>`;
+  }).join('');
+
+  area.innerHTML = countHtml + `<div class="file-grid">${cells}</div>`;
+}
+
+// ── SELECCIÓN & DETALLE ────────────────────────────────────────────────────
+function onItemClick(idx) {
+  selected_item = current_items[idx];
+
+  // Highlight
+  document.querySelectorAll('[data-idx]').forEach(el => el.classList.remove('selected'));
+  document.querySelectorAll(`[data-idx="${idx}"]`).forEach(el => el.classList.add('selected'));
+
+  renderDetail(selected_item);
+}
+
+function renderDetail(item) {
+  const panel = document.getElementById('detail-panel');
+
+  if (item.type === 'folder') {
+    panel.innerHTML = `
+      <div class="detail-section">
+        <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.75rem">
+          <span style="font-size:2rem;color:var(--accent2)">▸</span>
+          <div>
+            <div style="font-size:.85rem;font-weight:500;word-break:break-word">${escHtml(item.name)}</div>
+            <div style="font-family:var(--mono);font-size:.48rem;color:var(--muted);margin-top:.15rem">Carpeta</div>
+          </div>
+        </div>
+        ${item.cad_count > 0 ? `<div style="padding:.4rem .6rem;background:rgba(232,108,47,.08);border:1px solid rgba(232,108,47,.2);font-family:var(--mono);font-size:.5rem;color:var(--accent)">${item.cad_count} archivos CAD en esta carpeta</div>` : ''}
+      </div>
+      <div class="detail-section">
+        <div class="detail-title">Info</div>
+        <div class="detail-row"><span class="detail-lbl">Ruta</span><span class="detail-val" style="font-family:var(--mono);font-size:.48rem;color:var(--muted2)">${escHtml(item.path)}</span></div>
+        <div class="detail-row"><span class="detail-lbl">Modificado</span><span class="detail-val">${item.modified}</span></div>
+      </div>
+      <div class="detail-section">
+        <button class="btn-action btn-open" onclick="navigateTo('${esc(item.path)}')">▸ ABRIR CARPETA</button>
+        <button class="btn-action btn-watchfolder" onclick="addWatchFolder('${esc(item.path)}')">◈ AÑADIR A WATCH FOLDERS</button>
+      </div>`;
+    return;
+  }
+
+  // Archivo
+  const plm_section = item.is_cad ? `
+    <div class="detail-section">
+      <div class="detail-title">Estado PLM</div>
+      ${item.plm_registrado ? `
+        <div class="detail-row"><span class="detail-lbl">Código</span><span class="detail-val" style="font-family:var(--mono);color:var(--accent)">${item.plm_codigo}</span></div>
+        <div class="detail-row"><span class="detail-lbl">Estado</span><span class="detail-val"><span class="estado-chip estado-${item.plm_estado}">${item.plm_estado.replace('_',' ')}</span></span></div>
+        <button class="btn-action btn-view-plm" onclick="window.location='/plm/documento/${item.plm_id}'">◈ VER EN PLM</button>
+      ` : `
+        <div style="padding:.5rem;background:rgba(85,85,85,.1);border:1px solid var(--border);font-family:var(--mono);font-size:.5rem;color:var(--muted);margin-bottom:.75rem;text-align:center">
+          Archivo no registrado en PLM
+        </div>
+        <button class="btn-action btn-register" onclick="openRegisterModal()">+ REGISTRAR EN PLM</button>
+      `}
+    </div>` : '';
+
+  panel.innerHTML = `
+    <div class="detail-section">
+      <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.75rem">
+        <span style="font-size:2rem;color:${item.color || '#555'}">${item.icon}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:.8rem;font-weight:500;word-break:break-word;line-height:1.3">${escHtml(item.name)}</div>
+          <div style="font-family:var(--mono);font-size:.48rem;color:var(--muted);margin-top:.15rem">
+            ${item.software ? item.software.toUpperCase() + ' · ' : ''}${item.tipo || item.ext}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-title">Archivo</div>
+      <div class="detail-row"><span class="detail-lbl">Tamaño</span><span class="detail-val">${item.size}</span></div>
+      <div class="detail-row"><span class="detail-lbl">Modificado</span><span class="detail-val">${item.modified}</span></div>
+      <div class="detail-row"><span class="detail-lbl">Extensión</span><span class="detail-val" style="font-family:var(--mono);color:var(--muted2)">${item.ext}</span></div>
+    </div>
+    ${plm_section}
+    <div class="detail-section">
+      ${item.is_cad ? `<button class="btn-action btn-open" onclick="openFile('${esc(item.path)}')">⊞ ABRIR EN ${(item.software||'app').toUpperCase()}</button>` : ''}
+      <button class="btn-action" style="background:var(--card);border:1px solid var(--border);color:var(--muted2)" onclick="revealInExplorer('${esc(item.path)}')">▤ MOSTRAR EN CARPETA</button>
+    </div>`;
+}
+
+function resetDetail() {
+  document.getElementById('detail-panel').innerHTML = `
+    <div class="detail-empty">
+      <div class="detail-icon">◈</div>
+      <div style="font-family:var(--mono);font-size:.55rem;letter-spacing:.12em;text-transform:uppercase">Selecciona un archivo</div>
+    </div>`;
+}
+
+// ── ACCIONES ───────────────────────────────────────────────────────────────
+function openFile(path) {
+  fetch('/plm/explorer/open', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({path})
+  }).then(r => r.json()).then(d => {
+    if (d.ok) showToast('Abriendo archivo...', 'info');
+    else showToast('Error al abrir: ' + (d.error || ''), 'err');
+  });
+}
+
+function revealInExplorer(path) {
+  // En Windows usa explorer /select, en Mac open -R
+  fetch('/plm/explorer/open', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({path: path.replace(/[^/\\]*$/, '').replace(/[\\/]$/, '') || path})
+  });
+}
+
+function addWatchFolder(path) {
+  fetch('/plm/explorer/add_watchfolder', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({path, software: ''})
+  }).then(r => r.json()).then(d => {
+    if (d.ok) showToast('Carpeta añadida a Watch Folders ✓', 'ok');
+    else showToast(d.error || 'Error', 'err');
+  });
+}
+
+// ── MODAL REGISTRO PLM ─────────────────────────────────────────────────────
+function openRegisterModal() {
+  if (!selected_item || !selected_item.is_cad) return;
+  register_pending = selected_item;
+
+  document.getElementById('modal-file-info').innerHTML =
+    `<span style="color:var(--accent)">${selected_item.icon}</span>  ${escHtml(selected_item.name)}<br>
+     <span style="color:var(--muted)">${escHtml(selected_item.path)}</span>`;
+
+  // Cargar proyectos
+  const sel = document.getElementById('modal-proyecto');
+  sel.innerHTML = '<option value="">Sin proyecto</option>';
+  fetch('/plm/explorer/proyectos')
+    .then(r => r.json())
+    .then(proyectos => {
+      proyectos.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id; opt.textContent = p.nombre;
+        sel.appendChild(opt);
+      });
+    });
+
+  document.getElementById('modal-register').style.display = 'flex';
+}
+
+function closeModal() {
+  document.getElementById('modal-register').style.display = 'none';
+  register_pending = null;
+}
+
+function confirmRegister() {
+  if (!register_pending) return;
+  const proyecto_id = document.getElementById('modal-proyecto').value;
+
+  fetch('/plm/explorer/register', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({path: register_pending.path, proyecto_id: proyecto_id || null})
+  }).then(r => r.json()).then(d => {
+    closeModal();
+    if (d.ok) {
+      showToast(`Registrado como ${d.codigo} ✓`, 'ok');
+      // Actualizar item local
+      register_pending.plm_registrado = true;
+      register_pending.plm_codigo = d.codigo;
+      register_pending.plm_id = d.plm_id;
+      register_pending.plm_estado = 'en_diseno';
+      renderDetail(register_pending);
+      renderFiles(current_items); // Re-render para actualizar chips
+    } else {
+      showToast(d.error || 'Error al registrar', 'err');
+    }
+  });
+}
+
+// ── FILTROS & VISTA ────────────────────────────────────────────────────────
+function filterItems(val) {
+  renderFiles(current_items);
+}
+
+function toggleView() {
+  view_mode = view_mode === 'list' ? 'grid' : 'list';
+  document.getElementById('view-btn').textContent = view_mode === 'list' ? '⊞ GRID' : '☰ LISTA';
+  renderFiles(current_items);
+}
+
+// ── RECENT PLM ─────────────────────────────────────────────────────────────
+function loadRecentPLM() {
+  // Carga los últimos documentos desde la API de stats
+  fetch('/plm/api/recent')
+    .then(r => r.json())
+    .then(docs => {
+      const el = document.getElementById('recent-plm');
+      if (!docs || docs.length === 0) {
+        el.innerHTML = '<div style="padding:.4rem 1rem;font-size:.62rem;color:var(--muted)">Sin documentos</div>';
+        return;
+      }
+      el.innerHTML = docs.slice(0, 8).map(d => `
+        <div class="tree-item" onclick="window.location='/plm/documento/${d.id}'" title="${d.ruta_origen || d.nombre}">
+          <span class="icon" style="color:var(--accent);font-size:.65rem">${d.tipo === 'ensamblaje' ? '⬢' : d.tipo === 'plano' ? '▦' : '⬡'}</span>
+          <span class="name" style="font-family:var(--mono);font-size:.55rem">${d.codigo}</span>
+        </div>`).join('');
+    })
+    .catch(() => {});
+}
+
+// ── UTILS ──────────────────────────────────────────────────────────────────
+function showLoading() {
+  document.getElementById('file-area').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:center;height:200px;gap:.75rem;color:var(--muted)">
+      <div class="loading-spinner"></div>
+      <span style="font-family:var(--mono);font-size:.55rem;letter-spacing:.1em">CARGANDO...</span>
+    </div>`;
+}
+function hideLoading() {}
+
+function showToast(msg, type = 'info') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${type} show`;
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function esc(str) {
+  return (str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+function escHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+// Navegar usando data-path (evita problemas de escape con rutas Windows)
+function navigateToDataPath(el) {
+  const path = el.getAttribute('data-path');
+  if (path) navigateTo(path);
+}
+</script>
+{% endblock %}

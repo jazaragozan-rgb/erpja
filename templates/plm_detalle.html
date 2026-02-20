@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}— {{ doc.codigo }}{% endblock %}
+
+{% block topbar %}
+<div style="display:flex;align-items:center;gap:1rem;flex:1">
+  <a href="/plm" style="font-family:var(--mono);font-size:.55rem;color:var(--muted);text-decoration:none;letter-spacing:.1em">← PLM</a>
+  <span style="color:var(--border)">|</span>
+  <span style="font-family:var(--display);font-size:1.2rem;color:#fff">{{ doc.codigo }}</span>
+  <span class="estado-badge estado-{{ doc.estado }}">{{ doc.estado.replace('_',' ') }}</span>
+</div>
+{% endblock %}
+
+{% block content %}
+<style>
+.estado-badge{display:inline-block;padding:.15rem .5rem;font-family:var(--mono);font-size:.5rem;letter-spacing:.1em;text-transform:uppercase;border-radius:2px}
+.estado-en_diseno{background:rgba(52,152,219,.15);color:#3498db;border:1px solid rgba(52,152,219,.3)}
+.estado-revision{background:rgba(243,156,18,.15);color:#f39c12;border:1px solid rgba(243,156,18,.3)}
+.estado-aprobado{background:rgba(46,204,113,.15);color:#2ecc71;border:1px solid rgba(46,204,113,.3)}
+.estado-liberado{background:rgba(155,89,182,.15);color:#9b59b6;border:1px solid rgba(155,89,182,.3)}
+.estado-obsoleto{background:rgba(85,85,85,.15);color:#555;border:1px solid rgba(85,85,85,.3)}
+.detail-grid{display:grid;grid-template-columns:1fr 320px;gap:1rem}
+.panel{background:var(--card);border:1px solid var(--border);padding:1.25rem}
+.panel-title{font-family:var(--mono);font-size:.5rem;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid var(--border)}
+.field-row{display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.03);font-size:.78rem}
+.field-label{color:var(--muted);font-family:var(--mono);font-size:.5rem;letter-spacing:.08em;text-transform:uppercase;padding-top:.1rem}
+.field-val{color:var(--text);text-align:right}
+.rev-item{padding:.6rem .75rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.75rem}
+.rev-badge{font-family:var(--display);font-size:1.2rem;color:var(--accent);min-width:24px;text-align:center}
+.log-item{display:flex;gap:.75rem;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.03);font-size:.7rem}
+.log-accion{font-family:var(--mono);font-size:.48rem;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;min-width:80px}
+.estado-flow{display:flex;align-items:center;gap:.25rem;margin-bottom:1rem;flex-wrap:wrap}
+.estado-step{padding:.3rem .6rem;font-family:var(--mono);font-size:.5rem;letter-spacing:.08em;cursor:pointer;border:1px solid var(--border);background:var(--panel);color:var(--muted);text-transform:uppercase;transition:all .15s}
+.estado-step:hover{border-color:var(--accent);color:var(--accent)}
+.arrow{color:var(--muted);font-size:.6rem}
+</style>
+
+<div class="detail-grid">
+  <!-- COLUMNA PRINCIPAL -->
+  <div>
+    <div class="panel" style="margin-bottom:1rem">
+      <div class="panel-title">Información del documento</div>
+      <div class="field-row"><span class="field-label">Código</span><span class="field-val" style="font-family:var(--mono);color:var(--accent)">{{ doc.codigo }}</span></div>
+      <div class="field-row"><span class="field-label">Nombre</span><span class="field-val">{{ doc.nombre }}</span></div>
+      <div class="field-row"><span class="field-label">Tipo</span><span class="field-val">{{ doc.tipo }}</span></div>
+      <div class="field-row"><span class="field-label">Software</span><span class="field-val">{{ doc.software or '—' }}</span></div>
+      <div class="field-row"><span class="field-label">Proyecto</span><span class="field-val">{{ doc.proyecto_nombre or '—' }}</span></div>
+      <div class="field-row"><span class="field-label">Creado</span><span class="field-val" style="font-family:var(--mono);font-size:.6rem;color:var(--muted)">{{ doc.creado[:10] }}</span></div>
+      <div class="field-row"><span class="field-label">Modificado</span><span class="field-val" style="font-family:var(--mono);font-size:.6rem;color:var(--muted)">{{ doc.modificado[:10] }}</span></div>
+      {% if doc.ruta_origen %}
+      <div class="field-row"><span class="field-label">Ruta</span><span class="field-val" style="font-family:var(--mono);font-size:.55rem;color:var(--muted2);word-break:break-all;max-width:280px">{{ doc.ruta_origen }}</span></div>
+      {% endif %}
+      {% if doc.descripcion %}
+      <div style="margin-top:.75rem;padding:.75rem;background:var(--panel);font-size:.75rem;color:var(--muted2);border-left:2px solid var(--accent)">{{ doc.descripcion }}</div>
+      {% endif %}
+    </div>
+
+    <!-- CAMBIAR ESTADO -->
+    <div class="panel" style="margin-bottom:1rem">
+      <div class="panel-title">Flujo de estado</div>
+      <form method="POST" action="/plm/documento/{{ doc.id }}/estado" style="display:flex;flex-wrap:wrap;gap:.25rem;align-items:center">
+        {% for estado, label in [('en_diseno','En Diseño'),('revision','Revisión'),('aprobado','Aprobado'),('liberado','Liberado'),('obsoleto','Obsoleto')] %}
+        <button type="submit" name="estado" value="{{ estado }}"
+          class="estado-step {% if doc.estado == estado %}active{% endif %}"
+          style="{% if doc.estado == estado %}border-color:var(--accent);color:var(--accent);background:rgba(232,108,47,.08){% endif %}">
+          {{ label }}
+        </button>
+        {% if not loop.last %}<span class="arrow">→</span>{% endif %}
+        {% endfor %}
+      </form>
+    </div>
+
+    <!-- REVISIONES -->
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid var(--border)">
+        <span style="font-family:var(--mono);font-size:.5rem;letter-spacing:.2em;color:var(--muted);text-transform:uppercase">Historial de revisiones</span>
+        <button onclick="document.getElementById('modal-rev').style.display='flex'" class="btn-ghost" style="font-size:.6rem">+ NUEVA REV</button>
+      </div>
+
+      {% for rev in revisiones %}
+      <div class="rev-item">
+        <div class="rev-badge">{{ rev.revision }}</div>
+        <div style="flex:1">
+          <div style="font-size:.78rem;color:var(--text)">{{ rev.descripcion_cambio or 'Sin descripción' }}</div>
+          <div style="display:flex;gap:.75rem;margin-top:.2rem">
+            <span class="estado-badge estado-{{ rev.estado }}" style="font-size:.42rem">{{ rev.estado.replace('_',' ') }}</span>
+            <span style="font-family:var(--mono);font-size:.48rem;color:var(--muted)">{{ rev.creado_por }}</span>
+            <span style="font-family:var(--mono);font-size:.48rem;color:var(--muted)">{{ rev.fecha[:10] }}</span>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- COLUMNA LATERAL -->
+  <div>
+    <!-- LOG -->
+    <div class="panel">
+      <div class="panel-title">Registro de actividad</div>
+      {% for entry in log %}
+      <div class="log-item">
+        <span class="log-accion">{{ entry.accion }}</span>
+        <div style="flex:1">
+          <div style="color:var(--muted2)">{{ entry.detalle or '—' }}</div>
+          <div style="font-family:var(--mono);font-size:.45rem;color:var(--muted);margin-top:.1rem">{{ entry.fecha[:16] }}</div>
+        </div>
+      </div>
+      {% else %}
+      <div style="color:var(--muted);font-size:.72rem;text-align:center;padding:1rem">Sin actividad registrada</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- MODAL NUEVA REVISIÓN -->
+<div id="modal-rev" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--border);padding:2rem;width:420px;max-width:95vw">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
+      <span style="font-family:var(--display);font-size:1.3rem;color:#fff">NUEVA REVISIÓN</span>
+      <button onclick="document.getElementById('modal-rev').style.display='none'" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2rem">✕</button>
+    </div>
+    <form method="POST" action="/plm/documento/{{ doc.id }}/revision">
+      <div class="form-field">
+        <label class="form-label">Descripción del cambio</label>
+        <textarea name="descripcion" class="form-input" rows="3" placeholder="¿Qué cambió en esta revisión?" required></textarea>
+      </div>
+      <div class="form-field">
+        <label class="form-label">Estado</label>
+        <select name="estado" class="form-select">
+          <option value="en_diseno">En Diseño</option>
+          <option value="revision">En Revisión</option>
+          <option value="aprobado">Aprobado</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+        <button type="button" onclick="document.getElementById('modal-rev').style.display='none'" class="btn-ghost">Cancelar</button>
+        <button type="submit" class="btn-accent">CREAR REVISIÓN</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

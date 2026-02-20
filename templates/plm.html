@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+{% block title %}— PLM{% endblock %}
+
+{% block topbar %}
+<div style="display:flex;align-items:center;gap:1rem;flex:1">
+  <span style="font-family:var(--display);font-size:1.3rem;letter-spacing:.06em;color:#fff">PLM</span>
+  <span style="font-family:var(--mono);font-size:.55rem;color:var(--muted);letter-spacing:.15em">PRODUCT LIFECYCLE MANAGEMENT</span>
+</div>
+<div style="display:flex;gap:.5rem">
+  <button onclick="syncNow()" class="btn-ghost" style="font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;display:flex;align-items:center;gap:.4rem">
+    <span id="sync-icon">⟳</span> SYNC AHORA
+  </button>
+  <button onclick="document.getElementById('modal-doc').style.display='flex'" class="btn-accent">+ DOCUMENTO</button>
+  <button onclick="document.getElementById('modal-bom').style.display='flex'" class="btn-ghost">+ BOM</button>
+</div>
+{% endblock %}
+
+{% block content %}
+<style>
+.plm-stats{display:grid;grid-template-columns:repeat(6,1fr);gap:.75rem;margin-bottom:1.5rem}
+.stat-pill{background:var(--card);border:1px solid var(--border);padding:.75rem 1rem;text-align:center}
+.stat-pill .val{font-family:var(--display);font-size:1.8rem;color:#fff;line-height:1}
+.stat-pill .lbl{font-family:var(--mono);font-size:.48rem;letter-spacing:.15em;color:var(--muted);margin-top:.2rem;text-transform:uppercase}
+.estado-badge{display:inline-block;padding:.15rem .5rem;font-family:var(--mono);font-size:.5rem;letter-spacing:.1em;text-transform:uppercase;border-radius:2px}
+.estado-en_diseno{background:rgba(52,152,219,.15);color:#3498db;border:1px solid rgba(52,152,219,.3)}
+.estado-revision{background:rgba(243,156,18,.15);color:#f39c12;border:1px solid rgba(243,156,18,.3)}
+.estado-aprobado{background:rgba(46,204,113,.15);color:#2ecc71;border:1px solid rgba(46,204,113,.3)}
+.estado-liberado{background:rgba(155,89,182,.15);color:#9b59b6;border:1px solid rgba(155,89,182,.3)}
+.estado-obsoleto{background:rgba(85,85,85,.15);color:#555;border:1px solid rgba(85,85,85,.3)}
+.tipo-badge{display:inline-block;padding:.1rem .4rem;font-family:var(--mono);font-size:.48rem;letter-spacing:.08em;text-transform:uppercase;border-radius:2px;background:var(--panel);border:1px solid var(--border);color:var(--muted2)}
+.sw-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:.3rem;vertical-align:middle}
+.sw-solidworks{background:#e86c2f}
+.sw-autocad{background:#3498db}
+.sw-otro{background:#555}
+.plm-table{width:100%;border-collapse:collapse;font-size:.78rem}
+.plm-table th{font-family:var(--mono);font-size:.48rem;letter-spacing:.15em;color:var(--muted);text-transform:uppercase;padding:.5rem .75rem;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+.plm-table td{padding:.6rem .75rem;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
+.plm-table tr:hover td{background:rgba(255,255,255,.02)}
+.wf-item{background:var(--card);border:1px solid var(--border);padding:.75rem 1rem;display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem}
+.wf-ruta{font-family:var(--mono);font-size:.6rem;color:var(--muted2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:1.25rem}
+.tab{padding:.6rem 1.2rem;font-family:var(--mono);font-size:.55rem;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-content{display:none}.tab-content.active{display:block}
+</style>
+
+<!-- STATS -->
+<div class="plm-stats">
+  <div class="stat-pill"><div class="val">{{ stats.total_docs }}</div><div class="lbl">Total Docs</div></div>
+  <div class="stat-pill"><div class="val" style="color:#3498db">{{ stats.en_diseno }}</div><div class="lbl">En Diseño</div></div>
+  <div class="stat-pill"><div class="val" style="color:#f39c12">{{ stats.revision }}</div><div class="lbl">En Revisión</div></div>
+  <div class="stat-pill"><div class="val" style="color:#2ecc71">{{ stats.aprobados }}</div><div class="lbl">Aprobados</div></div>
+  <div class="stat-pill"><div class="val" style="color:#9b59b6">{{ stats.liberados }}</div><div class="lbl">Liberados</div></div>
+  <div class="stat-pill"><div class="val" style="color:var(--accent2)">{{ stats.total_boms }}</div><div class="lbl">BOMs</div></div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('docs',this)">Documentos CAD</div>
+  <div class="tab" onclick="switchTab('boms',this)">BOMs</div>
+  <div class="tab" onclick="switchTab('watchfolders',this)">Watch Folders</div>
+</div>
+
+<!-- TAB DOCUMENTOS -->
+<div id="tab-docs" class="tab-content active">
+  <div style="overflow-x:auto">
+    {% if docs %}
+    <table class="plm-table">
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Nombre</th>
+          <th>Tipo</th>
+          <th>Software</th>
+          <th>Estado</th>
+          <th>Proyecto</th>
+          <th>Modificado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for doc in docs %}
+        <tr>
+          <td><span style="font-family:var(--mono);font-size:.6rem;color:var(--accent)">{{ doc.codigo }}</span></td>
+          <td>{{ doc.nombre }}</td>
+          <td><span class="tipo-badge">{{ doc.tipo }}</span></td>
+          <td>
+            <span class="sw-dot sw-{{ doc.software }}"></span>
+            <span style="font-size:.7rem;color:var(--muted2)">{{ doc.software or '—' }}</span>
+          </td>
+          <td><span class="estado-badge estado-{{ doc.estado }}">{{ doc.estado.replace('_',' ') }}</span></td>
+          <td style="color:var(--muted2);font-size:.72rem">{{ doc.proyecto_nombre or '—' }}</td>
+          <td style="font-family:var(--mono);font-size:.55rem;color:var(--muted)">
+            {{ doc.modificado[:10] if doc.modificado else '—' }}
+          </td>
+          <td>
+            <a href="/plm/documento/{{ doc.id }}" style="font-family:var(--mono);font-size:.55rem;color:var(--accent);text-decoration:none">VER →</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="text-align:center;padding:3rem;color:var(--muted)">
+      <div style="font-family:var(--display);font-size:2rem;margin-bottom:.5rem">SIN DOCUMENTOS</div>
+      <div style="font-size:.75rem">Crea un documento manualmente o configura una Watch Folder</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- TAB BOMs -->
+<div id="tab-boms" class="tab-content">
+  {% if boms %}
+  <table class="plm-table">
+    <thead>
+      <tr><th>BOM</th><th>Proyecto</th><th>Líneas</th><th>Estado</th><th>Creado</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for bom in boms %}
+      <tr>
+        <td>
+          <div style="font-weight:500">{{ bom.nombre }}</div>
+          {% if bom.descripcion %}<div style="font-size:.68rem;color:var(--muted)">{{ bom.descripcion }}</div>{% endif %}
+        </td>
+        <td style="color:var(--muted2);font-size:.72rem">{{ bom.proyecto_nombre or '—' }}</td>
+        <td style="font-family:var(--mono);font-size:.65rem;color:var(--accent2)">{{ bom.num_lineas }}</td>
+        <td><span class="estado-badge estado-{{ bom.estado }}">{{ bom.estado }}</span></td>
+        <td style="font-family:var(--mono);font-size:.55rem;color:var(--muted)">{{ bom.creado[:10] }}</td>
+        <td><a href="/plm/bom/{{ bom.id }}" style="font-family:var(--mono);font-size:.55rem;color:var(--accent);text-decoration:none">VER →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="text-align:center;padding:3rem;color:var(--muted)">
+    <div style="font-family:var(--display);font-size:2rem;margin-bottom:.5rem">SIN BOMs</div>
+    <div style="font-size:.75rem">Crea tu primera lista de materiales</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- TAB WATCH FOLDERS -->
+<div id="tab-watchfolders" class="tab-content">
+  <div style="margin-bottom:1rem">
+    <form method="POST" action="/plm/watchfolder/add" style="display:flex;gap:.5rem;align-items:flex-end">
+      <div style="flex:1">
+        <label style="font-family:var(--mono);font-size:.5rem;letter-spacing:.12em;color:var(--muted);display:block;margin-bottom:.3rem;text-transform:uppercase">Ruta de la carpeta</label>
+        <input name="ruta" class="form-input" placeholder="C:\Users\JA\SolidWorks\Proyectos" required style="width:100%">
+      </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:.5rem;letter-spacing:.12em;color:var(--muted);display:block;margin-bottom:.3rem;text-transform:uppercase">Software</label>
+        <select name="software" class="form-select">
+          <option value="solidworks">SolidWorks</option>
+          <option value="autocad">AutoCAD</option>
+          <option value="">Mixto</option>
+        </select>
+      </div>
+      <button type="submit" class="btn-accent" style="white-space:nowrap">+ AÑADIR</button>
+    </form>
+  </div>
+
+  {% if watchfolders %}
+    {% for wf in watchfolders %}
+    <div class="wf-item">
+      <div style="width:8px;height:8px;border-radius:50%;background:{{ '#2ecc71' if wf.activa else '#555' }};flex-shrink:0"></div>
+      <div style="flex:1">
+        <div class="wf-ruta">{{ wf.ruta }}</div>
+        <div style="display:flex;gap:1rem;margin-top:.25rem">
+          <span style="font-family:var(--mono);font-size:.48rem;color:var(--muted)">
+            <span class="sw-dot sw-{{ wf.software or 'otro' }}"></span>{{ wf.software or 'mixto' }}
+          </span>
+          {% if wf.ultima_sync %}
+          <span style="font-family:var(--mono);font-size:.48rem;color:var(--muted)">
+            última sync: {{ wf.ultima_sync[:16] }}
+          </span>
+          {% endif %}
+        </div>
+      </div>
+      <form method="POST" action="/plm/watchfolder/{{ wf.id }}/toggle" style="display:inline">
+        <button type="submit" class="btn-ghost" style="font-size:.6rem;padding:.3rem .7rem">
+          {{ 'PAUSE' if wf.activa else 'ACTIVAR' }}
+        </button>
+      </form>
+      <form method="POST" action="/plm/watchfolder/{{ wf.id }}/delete" style="display:inline">
+        <button type="submit" class="btn-ghost" style="font-size:.6rem;padding:.3rem .7rem;color:var(--red)">✕</button>
+      </form>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div style="text-align:center;padding:2.5rem;color:var(--muted)">
+      <div style="font-family:var(--display);font-size:1.8rem;margin-bottom:.5rem">SIN CARPETAS CONFIGURADAS</div>
+      <div style="font-size:.75rem">Añade una ruta para monitorizar tus archivos CAD automáticamente</div>
+    </div>
+  {% endif %}
+
+  <div style="margin-top:1.5rem;padding:1rem;background:var(--card);border:1px solid var(--border);font-size:.72rem;color:var(--muted2)">
+    <div style="font-family:var(--mono);font-size:.5rem;letter-spacing:.12em;color:var(--muted);margin-bottom:.5rem;text-transform:uppercase">⚡ Extensiones detectadas automáticamente</div>
+    <div style="display:flex;flex-wrap:wrap;gap:.4rem">
+      {% for ext in ['.sldprt','.sldasm','.slddrw','.dwg','.dxf','.ipt','.iam','.idw','.step','.stp','.iges','.stl'] %}
+      <span style="font-family:var(--mono);font-size:.5rem;background:var(--panel);border:1px solid var(--border);padding:.15rem .4rem;color:var(--accent)">{{ ext }}</span>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- MODAL NUEVO DOCUMENTO -->
+<div id="modal-doc" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--border);padding:2rem;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
+      <span style="font-family:var(--display);font-size:1.4rem;color:#fff">NUEVO DOCUMENTO CAD</span>
+      <button onclick="document.getElementById('modal-doc').style.display='none'" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2rem">✕</button>
+    </div>
+    <form method="POST" action="/plm/documento/nuevo">
+      <div class="form-grid cols-2">
+        <div class="form-field">
+          <label class="form-label">Tipo *</label>
+          <select name="tipo" class="form-select" required>
+            <option value="pieza">Pieza</option>
+            <option value="ensamblaje">Ensamblaje</option>
+            <option value="plano">Plano</option>
+            <option value="otro">Otro</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label class="form-label">Software</label>
+          <select name="software" class="form-select">
+            <option value="solidworks">SolidWorks</option>
+            <option value="autocad">AutoCAD</option>
+            <option value="otro">Otro</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-field">
+        <label class="form-label">Nombre *</label>
+        <input name="nombre" class="form-input" placeholder="Ej: Soporte principal CNC" required>
+      </div>
+      <div class="form-field">
+        <label class="form-label">Proyecto</label>
+        <select name="proyecto_id" class="form-select">
+          <option value="">Sin proyecto</option>
+          {% for p in proyectos %}<option value="{{ p.id }}">{{ p.nombre }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-grid cols-2">
+        <div class="form-field">
+          <label class="form-label">Estado inicial</label>
+          <select name="estado" class="form-select">
+            <option value="en_diseno">En Diseño</option>
+            <option value="revision">En Revisión</option>
+            <option value="aprobado">Aprobado</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label class="form-label">Ruta de archivo</label>
+          <input name="ruta_origen" class="form-input" placeholder="C:\...\archivo.sldprt">
+        </div>
+      </div>
+      <div class="form-field">
+        <label class="form-label">Descripción</label>
+        <textarea name="descripcion" class="form-input" rows="2" placeholder="Descripción opcional..."></textarea>
+      </div>
+      <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+        <button type="button" onclick="document.getElementById('modal-doc').style.display='none'" class="btn-ghost">Cancelar</button>
+        <button type="submit" class="btn-accent">CREAR DOCUMENTO</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL NUEVA BOM -->
+<div id="modal-bom" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--border);padding:2rem;width:480px;max-width:95vw">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
+      <span style="font-family:var(--display);font-size:1.4rem;color:#fff">NUEVA BOM</span>
+      <button onclick="document.getElementById('modal-bom').style.display='none'" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2rem">✕</button>
+    </div>
+    <form method="POST" action="/plm/bom/nuevo">
+      <div class="form-field">
+        <label class="form-label">Nombre de la BOM *</label>
+        <input name="nombre" class="form-input" placeholder="Ej: BOM Ensamblaje elevador" required>
+      </div>
+      <div class="form-field">
+        <label class="form-label">Proyecto</label>
+        <select name="proyecto_id" class="form-select">
+          <option value="">Sin proyecto</option>
+          {% for p in proyectos %}<option value="{{ p.id }}">{{ p.nombre }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-field">
+        <label class="form-label">Descripción</label>
+        <textarea name="descripcion" class="form-input" rows="2"></textarea>
+      </div>
+      <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+        <button type="button" onclick="document.getElementById('modal-bom').style.display='none'" class="btn-ghost">Cancelar</button>
+        <button type="submit" class="btn-accent">CREAR BOM</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function switchTab(name, el) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  el.classList.add('active');
+}
+
+async function syncNow() {
+  const icon = document.getElementById('sync-icon');
+  icon.style.animation = 'spin 1s linear infinite';
+  icon.style.display = 'inline-block';
+  try {
+    const r = await fetch('/plm/sync', {method:'POST'});
+    const d = await r.json();
+    icon.style.animation = '';
+    if(d.nuevos > 0 || d.actualizados > 0) {
+      alert(`Sync completado:\n• ${d.nuevos} nuevos documentos\n• ${d.actualizados} actualizados`);
+      location.reload();
+    } else {
+      icon.textContent = '✓';
+      setTimeout(() => { icon.textContent = '⟳'; }, 2000);
+    }
+  } catch(e) {
+    icon.style.animation = '';
+    icon.textContent = '✗';
+    setTimeout(() => { icon.textContent = '⟳'; }, 2000);
+  }
+}
+</script>
+<style>
+@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+</style>
+{% endblock %}
